@@ -40,6 +40,17 @@ parser_error_t printAddress( bytes_t pubkeyHash,
     return parser_ok;
 }
 
+parser_error_t printPaymentAddress( sapling_payment_address_t *pubkeyHash,
+                             char *outVal, uint16_t outValLen,
+                             uint8_t pageIdx, uint8_t *pageCount) {
+
+    char address[110] = {0};
+    CHECK_ERROR(readPaymentAddress(pubkeyHash, address, sizeof(address)))
+    pageString(outVal, outValLen, (const char*) address, pageIdx, pageCount);
+
+    return parser_ok;
+}
+
 parser_error_t printCouncilVote( uint32_t number_of_councils, council_t *councils,
                                  char *outVal, uint16_t outValLen,
                                  uint8_t pageIdx, uint8_t *pageCount) {

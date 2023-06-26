@@ -152,6 +152,27 @@ parser_error_t readAddress(bytes_t pubkeyHash, char *address, uint16_t addressLe
     return parser_ok;
 }
 
+parser_error_t readPaymentAddress(sapling_payment_address_t *paymentAddress, char *formattedAddress, uint16_t addressLen) {
+
+    uint8_t tmpBuffer[DIVERSIFIER_LENGTH + HASH_LEN] = {0};
+    MEMCPY(tmpBuffer , paymentAddress->diversifier.ptr, DIVERSIFIER_LENGTH);
+    MEMCPY(tmpBuffer + DIVERSIFIER_LENGTH, paymentAddress->pk_d.ptr, HASH_LEN);
+
+    const char *hrp = "patest";
+    const zxerr_t err = bech32EncodeFromBytes(formattedAddress,
+                                              addressLen,
+                                              hrp,
+                                              tmpBuffer,
+                                              DIVERSIFIER_LENGTH + HASH_LEN,
+                                              0,
+                                              BECH32_ENCODING_BECH32M);
+
+    if (err != zxerr_ok) {
+        return parser_unexpected_error;
+    }
+    return parser_ok;
+}
+
 static parser_error_t readTransactionType(bytes_t codeHash, transaction_type_e *type) {
     if (type == NULL) {
          return parser_unexpected_error;
@@ -511,7 +532,7 @@ static parser_error_t readUpdateVPTxn(const bytes_t *data,const bytes_t *extra_d
     return parser_ok;
 }
 
-static parser_error_t readTransferTxn(const bytes_t *data, parser_tx_t *v) {
+static parser_error_t readTransferTxn(const bytes_t *data, const masp_builder_section_t* maspBuilder,parser_tx_t *v) {
     // https://github.com/anoma/namada/blob/8f960d138d3f02380d129dffbd35a810393e5b13/core/src/types/token.rs#L467-L482
     parser_context_t ctx = {.buffer = data->ptr, .bufferLen = data->len, .offset = 0, .tx_obj = NULL};
 
@@ -552,7 +573,13 @@ static parser_error_t readTransferTxn(const bytes_t *data, parser_tx_t *v) {
         v->transfer.shielded_hash.len = SHA256_SIZE;
         // we are not displaying these bytes
         ctx.offset += v->transfer.shielded_hash.len;
+        if (maspBuilder->builder.sapling_builder.num_of_outputs > 0){
+            uint32_t outputs_len = maspBuilder->builder.sapling_builder.num_of_outputs * SAPLING_OUTPUT_INFO_LEN;
+
+        }
     }
+
+
 
     if (ctx.offset != ctx.bufferLen) {
         return parser_unexpected_characters;
@@ -638,14 +665,14 @@ parser_error_t readHeader(parser_context_t *ctx, parser_tx_t *v) {
     CHECK_ERROR(readUint64(ctx, &v->transaction.header.gasLimit))
 
     // Check if a PoW solution is present (should only exist in mainnet)
-    uint8_t num_pow_solution = 0;
-    CHECK_ERROR(readByte(ctx, &num_pow_solution))
-    if (num_pow_solution){
+    uint8_t pow_solution_provided = 0;
+    CHECK_ERROR(readByte(ctx, &pow_solution_provided))
+    if (pow_solution_provided){
         // A PoW solution consists of :
         // - challenge parameters = Difficulty (u8) and a Counter (u64)
         // - a SolutionValue (u64)
         // so we skip 17 bytes
-        ctx->offset += num_pow_solution * 17;
+        ctx->offset += 17;
     }
 
     v->transaction.header.bytes.len = ctx->offset - tmpOffset;
@@ -753,7 +780,7 @@ static parser_error_t readSignature(parser_context_t *ctx, signature_section_t *
 #endif
     return parser_ok;
 }
-#if(0)
+
 static parser_error_t readCiphertext(parser_context_t *ctx, section_t *ciphertext) {
     (void) ctx;
     (void) ciphertext;
@@ -761,18 +788,441 @@ static parser_error_t readCiphertext(parser_context_t *ctx, section_t *ciphertex
 }
 
 
-static parser_error_t readMaspTx(parser_context_t *ctx, section_t *maspTx) {
-    ctx->offset += 1171; // <- Transfer 2 // Transfer 1 -> 2403;//todo figure out correct number, fix this hack
-    (void) maspTx;
+static parser_error_t readMaspTxSection(parser_context_t *ctx, masp_tx_section_t *maspTx) {
+    if (ctx == NULL || maspTx == NULL) {
+        return parser_unexpected_error;
+    }
+
+    CHECK_ERROR(readByte(ctx, &maspTx->discriminant))
+    if (maspTx->discriminant != DISCRIMINANT_MASP_TX) {
+        return parser_unexpected_value;
+    }
+
+    CHECK_ERROR(readUint32(ctx, &maspTx->data.tx_version))
+    CHECK_ERROR(readUint32(ctx, &maspTx->data.version_group_id))
+    CHECK_ERROR(readUint32(ctx, &maspTx->data.consensus_branch_id))
+    CHECK_ERROR(readUint32(ctx, &maspTx->data.lock_time))
+    CHECK_ERROR(readUint32(ctx, &maspTx->data.expiry_height))
+
+    // Transparent bundles
+    // first read vector of vin
+    CHECK_ERROR(readByte(ctx, &maspTx->data.transparent_bundle.num_of_vin))
+    uint8_t tmp_offset = 0;
+    for (int i = 0; i < maspTx->data.transparent_bundle.num_of_vin; ++i) {
+        masp_vin_t *vin = &maspTx->data.transparent_bundle.vin[i];
+        vin->asset_type_id.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx,
+                              &vin->asset_type_id.ptr,
+                              vin->asset_type_id.len))
+        CHECK_ERROR(readUint64(ctx, &vin->value))
+        vin->transparent_address.len = 20;
+        CHECK_ERROR(readBytes(ctx,
+                              &vin->transparent_address.ptr,
+                              vin->transparent_address.len))
+        tmp_offset+= vin->asset_type_id.len + sizeof(uint64_t) + vin->transparent_address.len;
+    }
+    CHECK_ERROR(readByte(ctx, &maspTx->data.transparent_bundle.num_of_vout))
+    tmp_offset = 0;
+    for (int i = 0; i < maspTx->data.transparent_bundle.num_of_vout; ++i) {
+        // todo read vout
+    }
+
+    // Sapling bundles
+    // first read shielded spends
+    CHECK_ERROR(readByte(ctx, &maspTx->data.sapling_bundle.num_of_shielded_spends))
+    tmp_offset = 0;
+    for (int i = 0; i < maspTx->data.sapling_bundle.num_of_shielded_spends; ++i) {
+        spend_description_t shielded_spend = *(&maspTx->data.sapling_bundle.shielded_spends[0]+tmp_offset);
+
+        //  cv -> 32 bytes
+        shielded_spend.cv.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx, &shielded_spend.cv.ptr, shielded_spend.cv.len))
+        tmp_offset += shielded_spend.cv.len;
+
+        //  anchor -> 32 bytes bls12_381::Scalar
+        shielded_spend.anchor.len = 32;
+        CHECK_ERROR(readBytes(ctx, &shielded_spend.anchor.ptr, shielded_spend.anchor.len))
+        tmp_offset += shielded_spend.anchor.len;
+
+        //  nullifier -> 32 bytes :  [u8; 32]
+        shielded_spend.nullifier.len = 32;
+        CHECK_ERROR(readBytes(ctx, &shielded_spend.nullifier.ptr, shielded_spend.nullifier.len))
+        tmp_offset += shielded_spend.nullifier.len;
+
+        //   rk -> 32 bytes: Extended Point, i.e. 5 elements in Fq, each of which are represented by 32
+        shielded_spend.rk.len = 32;
+        CHECK_ERROR(readBytes(ctx, &shielded_spend.rk.ptr, shielded_spend.rk.len))
+        tmp_offset += shielded_spend.rk.len;
+
+        //   zkproof -> 192 bytes
+        shielded_spend.zkproof.len = 192;
+        CHECK_ERROR(readBytes(ctx, &shielded_spend.zkproof.ptr, shielded_spend.zkproof.len))
+        tmp_offset += shielded_spend.zkproof.len;
+
+        //   spend_auth_sig -> 64 bytes:    rbar: [u8; 32], sbar: [u8; 32],
+        shielded_spend.spend_auth_sig.len = 64;
+        CHECK_ERROR(readBytes(ctx, &shielded_spend.spend_auth_sig.ptr, shielded_spend.spend_auth_sig.len))
+        tmp_offset += shielded_spend.spend_auth_sig.len;
+
+    }
+
+    // second read shielded converts
+    CHECK_ERROR(readByte(ctx, &maspTx->data.sapling_bundle.num_of_shielded_converts))
+    tmp_offset = 0;
+    for (int i = 0; i < maspTx->data.sapling_bundle.num_of_shielded_converts; ++i) {
+        convert_description_t shielded_convert = *(&maspTx->data.sapling_bundle.shielded_converts[0]+tmp_offset);
+
+        //  cv -> 32 bytes
+        shielded_convert.cv.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx, &shielded_convert.cv.ptr, shielded_convert.cv.len))
+        tmp_offset += shielded_convert.cv.len;
+
+        //  anchor -> 32 bytes bls12_381::Scalar
+        shielded_convert.anchor.len = 32;
+        CHECK_ERROR(readBytes(ctx, &shielded_convert.anchor.ptr, shielded_convert.anchor.len))
+        tmp_offset += shielded_convert.anchor.len;
+
+        //   zkproof -> 192 bytes
+        shielded_convert.zkproof.len = 192;
+        CHECK_ERROR(readBytes(ctx, &shielded_convert.zkproof.ptr, shielded_convert.zkproof.len))
+        tmp_offset += shielded_convert.zkproof.len;
+    }
+
+    // third read shielded outputs
+    CHECK_ERROR(readByte(ctx, &maspTx->data.sapling_bundle.num_of_shielded_outputs))
+    tmp_offset = 0;
+    for (int i = 0; i < maspTx->data.sapling_bundle.num_of_shielded_outputs; ++i) {
+        output_description_t *shielded_output = &maspTx->data.sapling_bundle.shielded_outputs[i];
+
+        //  cv -> 32 bytes
+        shielded_output->cv.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx, &shielded_output->cv.ptr, shielded_output->cv.len))
+        tmp_offset += shielded_output->cv.len;
+
+        //  cmu -> 32 bytes
+        shielded_output->cmu.len = 32;
+        CHECK_ERROR(readBytes(ctx, &shielded_output->cmu.ptr, shielded_output->cmu.len))
+        tmp_offset += shielded_output->cmu.len;
+
+        //  ephemeral_key -> 32 bytes
+        shielded_output->ephemeral_key.len = 32;
+        CHECK_ERROR(readBytes(ctx, &shielded_output->ephemeral_key.ptr, shielded_output->ephemeral_key.len))
+        tmp_offset += shielded_output->ephemeral_key.len;
+
+        //  enc_ciphertext -> [u8; 612]]
+        shielded_output->enc_ciphertext.len = 612;
+        CHECK_ERROR(readBytes(ctx, &shielded_output->enc_ciphertext.ptr, shielded_output->enc_ciphertext.len))
+        tmp_offset += shielded_output->enc_ciphertext.len;
+
+        //  out_ciphertext -> [u8; 80]]
+        shielded_output->out_ciphertext.len = 80;
+        CHECK_ERROR(readBytes(ctx, &shielded_output->out_ciphertext.ptr, shielded_output->out_ciphertext.len))
+        tmp_offset += shielded_output->out_ciphertext.len;
+    }
+
+    // fourth read value balance
+    uint8_t num_of_value_balances =0;
+    CHECK_ERROR(readByte(ctx, &num_of_value_balances))
+    if (num_of_value_balances > 1){
+        // TODO CHECK THIS
+        return parser_unexpected_value;
+    }
+
+    maspTx->data.sapling_bundle.value_balance.asset_type_id.len = HASH_LEN;
+    CHECK_ERROR(readBytes(ctx, &maspTx->data.sapling_bundle.value_balance.asset_type_id.ptr,
+                          maspTx->data.sapling_bundle.value_balance.asset_type_id.len))
+
+    CHECK_ERROR(readUint64(ctx, &maspTx->data.sapling_bundle.value_balance.value))
+
+    // fifth read authorization
+    maspTx->data.sapling_bundle.authorization_proof.len = 192;
+    CHECK_ERROR(readBytes(ctx, &maspTx->data.sapling_bundle.authorization_proof.ptr,
+                          maspTx->data.sapling_bundle.authorization_proof.len))
+    maspTx->data.sapling_bundle.authorization_sig_rbar.len = 32;
+    CHECK_ERROR(readBytes(ctx, &maspTx->data.sapling_bundle.authorization_sig_rbar.ptr,
+                          maspTx->data.sapling_bundle.authorization_sig_rbar.len))
+    maspTx->data.sapling_bundle.authorization_sig_sbar.len = 32;
+    CHECK_ERROR(readBytes(ctx, &maspTx->data.sapling_bundle.authorization_sig_sbar.ptr,
+                          maspTx->data.sapling_bundle.authorization_sig_sbar.len))
+    return parser_ok;
+
+}
+
+static parser_error_t readSaplingBuilder(parser_context_t *ctx, sapling_builder_t *saplingBuilder) {
+    CHECK_ERROR(readByte(ctx, &saplingBuilder->has_spend_anchor))
+    if(saplingBuilder->has_spend_anchor){
+        // read anchor
+        saplingBuilder->spend_anchor.len = 32;
+        CHECK_ERROR(readBytes(ctx, &saplingBuilder->spend_anchor.ptr,
+                              saplingBuilder->spend_anchor.len))
+    }
+
+    // 4.4.2 read target height
+    CHECK_ERROR(readUint32(ctx, &saplingBuilder->target_height))
+
+    // todo check this, is it the number of asset types?
+    ctx->offset += 4;
+
+    // 4.4.3 read asset type
+    saplingBuilder->value_balance_asset_type.len = HASH_LEN;
+    CHECK_ERROR(readBytes(ctx, &saplingBuilder->value_balance_asset_type.ptr,
+                          saplingBuilder->value_balance_asset_type.len))
+    // 4.3.4 read asset value
+    CHECK_ERROR(readUint64(ctx, &saplingBuilder->value_balance_amount))
+
+    // has convert_anchor:
+    CHECK_ERROR(readByte(ctx, &saplingBuilder->has_convert_anchor))
+    if(saplingBuilder->has_convert_anchor){
+        // read convert_anchor
+        saplingBuilder->convert_anchor.len=32;
+        CHECK_ERROR(readBytes(ctx, &saplingBuilder->convert_anchor.ptr,
+                              saplingBuilder->convert_anchor.len))
+    }
+    // read spends
+    CHECK_ERROR(readUint32(ctx, &saplingBuilder->num_of_spends))
+    uint8_t spends_offset = 0;
+    for (uint32_t i = 0; i < saplingBuilder->num_of_spends; ++i) {
+        spend_description_info_t* spend = &saplingBuilder->spends[0] + spends_offset;
+        // read extended_spending_key
+        CHECK_ERROR(readByte(ctx, &spend->extsk.depth))
+        spends_offset += 1;
+        spend->extsk.parent_fvk_tag.len = 4;
+        CHECK_ERROR(readBytes(ctx, &spend->extsk.parent_fvk_tag.ptr,
+                              spend->extsk.parent_fvk_tag.len))
+        spends_offset += 4;
+
+        CHECK_ERROR(readByte(ctx, &spend->extsk.child_index_type))
+        spends_offset += 1;
+
+        CHECK_ERROR(readUint32(ctx, &spend->extsk.child_index))
+        spends_offset += 4;
+
+        spend->extsk.chain_code.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->extsk.chain_code.ptr,
+                              spend->extsk.chain_code.len))
+        spends_offset += 32;
+
+        spend->extsk.expsk.ask.len = 32;
+        spend->extsk.expsk.nsk.len = 32;
+        spend->extsk.expsk.ovk.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->extsk.expsk.ask.ptr,
+                              spend->extsk.expsk.ask.len))
+        CHECK_ERROR(readBytes(ctx, &spend->extsk.expsk.nsk.ptr,
+                              spend->extsk.expsk.nsk.len))
+        CHECK_ERROR(readBytes(ctx, &spend->extsk.expsk.ovk.ptr,
+                              spend->extsk.expsk.ovk.len))
+        spends_offset += spend->extsk.expsk.ask.len
+                        + spend->extsk.expsk.nsk.len
+                        + spend->extsk.expsk.ovk.len;
+
+        spend->extsk.dk.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->extsk.dk.ptr,
+                              spend->extsk.dk.len))
+        spends_offset += spend->extsk.dk.len;
+
+        // read diversifier
+        spend->diversifier.len = DIVERSIFIER_LENGTH;
+        CHECK_ERROR(readBytes(ctx, &spend->diversifier.ptr,
+                              spend->diversifier.len))
+        spends_offset += spend->diversifier.len;
+
+        // read note
+        spend->note.asset_type.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->note.asset_type.ptr,
+                              spend->note.asset_type.len))
+        spends_offset += spend->note.asset_type.len;
+
+        CHECK_ERROR(readUint64(ctx, &spend->note.value))
+        spends_offset += 8;
+
+        spend->note.g_d.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->note.g_d.ptr,
+                              spend->note.g_d.len))
+        spends_offset += spend->note.g_d.len;
+
+        spend->note.pk_d.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->note.pk_d.ptr,
+                              spend->note.pk_d.len))
+        spends_offset += spend->note.pk_d.len;
+
+        spend->note.rseed.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->note.rseed.ptr,
+                              spend->note.rseed.len))
+        spends_offset += spend->note.rseed.len;
+
+        // read alpha
+        spend->alpha.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->alpha.ptr,
+                              spend->alpha.len))
+        spends_offset += spend->alpha.len;
+
+        // read merkle path
+        CHECK_ERROR(readUint32(ctx, &spend->merkle_path.num_auth_path))
+        spends_offset += 4;
+
+        spend->merkle_path.auth_path.len = spend->merkle_path.num_auth_path * 33;
+        CHECK_ERROR(readBytes(ctx, &spend->merkle_path.auth_path.ptr,
+                              spend->merkle_path.auth_path.len))
+        spends_offset += spend->merkle_path.auth_path.len;
+
+        spend->merkle_path.generator.len = 32;
+        CHECK_ERROR(readBytes(ctx, &spend->merkle_path.generator.ptr,
+                              spend->merkle_path.generator.len))
+        spends_offset +=  spend->merkle_path.generator.len;
+    }
+
+    // read converts
+    CHECK_ERROR(readUint32(ctx, &saplingBuilder->num_of_converts))
+    uint8_t convert_offset = 0;
+    for (uint32_t i = 0; i < saplingBuilder->num_of_converts; ++i) {
+        convert_description_info_t* convert = &saplingBuilder->converts[0] + convert_offset;
+        convert->allowed.amount.asset_type_id.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx, &convert->allowed.amount.asset_type_id.ptr,
+                              convert->allowed.amount.asset_type_id.len))
+        convert_offset +=  convert->allowed.amount.asset_type_id.len;
+
+        CHECK_ERROR(readUint64(ctx, &convert->allowed.amount.value))
+        convert_offset += sizeof(uint64_t);
+
+        // TODO: check num bytes of generator
+        convert->allowed.generator.len = 32;
+        CHECK_ERROR(readBytes(ctx, &convert->allowed.generator.ptr,
+                              convert->allowed.generator.len))
+        convert_offset +=  convert->allowed.generator.len;
+    }
+    // read outputs
+    CHECK_ERROR(readUint32(ctx, &saplingBuilder->num_of_outputs))
+    uint8_t outputs_offset = 0;
+    for (uint32_t i = 0; i < saplingBuilder->num_of_outputs; ++i) {
+        sapling_output_info* outputInfo = &saplingBuilder->outputs[0] + i * SAPLING_OUTPUT_INFO_LEN;
+
+        CHECK_ERROR(readByte(ctx, &outputInfo->has_ovk))
+        outputs_offset +=1;
+        if (outputInfo->has_ovk){
+            outputInfo->ovk.len = 32;
+            CHECK_ERROR(readBytes(ctx, &outputInfo->ovk.ptr, outputInfo->ovk.len))
+            outputs_offset += outputInfo->ovk.len;
+        }
+
+        outputInfo->to.diversifier.len = DIVERSIFIER_LENGTH;
+        CHECK_ERROR(readBytes(ctx, &outputInfo->to.diversifier.ptr,
+                              outputInfo->to.diversifier.len))
+        outputs_offset += outputInfo->to.diversifier.len;
+
+        outputInfo->to.pk_d.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx, &outputInfo->to.pk_d.ptr,
+                              outputInfo->to.pk_d.len))
+        outputs_offset += outputInfo->to.pk_d.len;
+
+        outputInfo->note.asset_type.len = 32;
+        CHECK_ERROR(readBytes(ctx, &outputInfo->note.asset_type.ptr,
+                              outputInfo->note.asset_type.len))
+        outputs_offset += outputInfo->note.asset_type.len;
+
+        CHECK_ERROR(readUint64(ctx, &outputInfo->note.value))
+        outputs_offset += 8;
+
+        outputInfo->note.g_d.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx, &outputInfo->note.g_d.ptr,
+                              outputInfo->note.g_d.len))
+        outputs_offset += outputInfo->note.g_d.len;
+
+        outputInfo->note.pk_d.len = HASH_LEN;
+        CHECK_ERROR(readBytes(ctx, &outputInfo->note.pk_d.ptr,
+                              outputInfo->note.pk_d.len))
+        outputs_offset += outputInfo->note.pk_d.len;
+
+        CHECK_ERROR(readByte(ctx, &outputInfo->note.rseed_type))
+
+        outputInfo->note.rseed.len = 32;
+        CHECK_ERROR(readBytes(ctx, &outputInfo->note.rseed.ptr,
+                              outputInfo->note.rseed.len))
+        outputs_offset += outputInfo->note.rseed.len;
+
+        // read memo bytes
+        outputInfo->memo_bytes.len=512;
+        CHECK_ERROR(readBytes(ctx, &outputInfo->memo_bytes.ptr,
+                              outputInfo->memo_bytes.len))
+        outputs_offset += outputInfo->memo_bytes.len;
+
+    }
     return parser_ok;
 }
 
-static parser_error_t readMaspBuilder(parser_context_t *ctx, section_t *maspBuilder) {
-    ctx->offset += 941; // <- Transfer 2 // Transfer 1 -> 3060; //todo figure out correct number, fix this hack
-    (void) maspBuilder;
+static parser_error_t readMaspBuilderSection(parser_context_t *ctx, masp_builder_section_t *maspBuilder) {
+    if (ctx == NULL || maspBuilder == NULL) {
+        return parser_unexpected_error;
+    }
+
+    CHECK_ERROR(readByte(ctx, &maspBuilder->discriminant))
+    if (maspBuilder->discriminant != DISCRIMINANT_MASP_BUILDER) {
+        return parser_unexpected_value;
+    }
+
+    // 1. Read target
+    maspBuilder->target.len = HASH_LEN;
+    CHECK_ERROR(readBytes(ctx, &maspBuilder->target.ptr, maspBuilder->target.len))
+
+    // 2. Read asset types
+    uint32_t num_asset_types = 0;
+    CHECK_ERROR(readUint32(ctx, &num_asset_types))
+
+    // each asset_type consists of an address (45 bytes) and an epoch (uint46_t)
+    maspBuilder->asset_types.len = num_asset_types * (ADDRESS_LEN_BYTES + sizeof(uint64_t) );
+    CHECK_ERROR(readBytes(ctx, &maspBuilder->asset_types.ptr, maspBuilder->asset_types.len))
+
+    // 3. Read Sapling metadata
+    // first read the number of spend_indices
+    uint32_t num_spend_indices = 0;
+    CHECK_ERROR(readUint32(ctx, &num_spend_indices))
+    // each index is a size_t
+    maspBuilder->metadata.spend_indices.len = sizeof(size_t) * num_spend_indices;
+    CHECK_ERROR(readBytes(ctx, &maspBuilder->metadata.spend_indices.ptr, maspBuilder->metadata.spend_indices.len))
+
+    // second read the number of convert_indices
+    uint32_t num_convert_indices = 0;
+    CHECK_ERROR(readUint32(ctx, &num_convert_indices))
+    // each index is a size_t
+    maspBuilder->metadata.convert_indices.len = sizeof(size_t) * num_convert_indices;
+    CHECK_ERROR(readBytes(ctx, &maspBuilder->metadata.convert_indices.ptr, maspBuilder->metadata.convert_indices.len))
+
+    // finally read the number of output_indices
+    uint32_t num_output_indices = 0;
+    CHECK_ERROR(readUint32(ctx, &num_output_indices))
+    // each index is a size_t
+    maspBuilder->metadata.output_indices.len = sizeof(size_t) * num_output_indices;
+    CHECK_ERROR(readBytes(ctx, &maspBuilder->metadata.output_indices.ptr, maspBuilder->metadata.output_indices.len))
+
+    // 4. Read builder
+    // 4.1. Read target height
+    CHECK_ERROR(readUint32(ctx, &maspBuilder->builder.target_height))
+    // 4.2. Read expiry height
+    CHECK_ERROR(readUint32(ctx, &maspBuilder->builder.expiry_height))
+    // 4.3. Read transparent builder
+    // First read the number of TransparentInputInfo in inputs = Vec<TransparentInputInfo>
+    uint32_t num_transparent_inputs = 0;
+    CHECK_ERROR(readUint32(ctx, &num_transparent_inputs))
+    // A TransparentInputInfo just consists of a TxOut,
+    // A TxOut consists of :
+    // - an asset type identifier (32 bytes),
+    // - a value int64_t (8 bytes)
+    // - a transparent address (20 bytes)
+    maspBuilder->builder.transparent_builder.inputs.len = num_transparent_inputs * 60;
+    CHECK_ERROR(readBytes(ctx, &maspBuilder->builder.transparent_builder.inputs.ptr,
+                          maspBuilder->builder.transparent_builder.inputs.len))
+    // Next read the number of TxOuts in vout: Vec<TxOut>
+    uint32_t num_tx_outs = 0;
+    CHECK_ERROR(readUint32(ctx, &num_tx_outs))
+    maspBuilder->builder.transparent_builder.vout.len = num_tx_outs * 60;
+    CHECK_ERROR(readBytes(ctx, &maspBuilder->builder.transparent_builder.vout.ptr,
+                          maspBuilder->builder.transparent_builder.vout.len))
+
+    // 4.4. Read sapling builder
+    CHECK_ERROR(readSaplingBuilder(ctx, &maspBuilder->builder.sapling_builder))
+
     return parser_ok;
 }
-#endif
+
 parser_error_t readSections(parser_context_t *ctx, parser_tx_t *v) {
     if (ctx == NULL || v == NULL) {
         return parser_unexpected_value;
@@ -801,19 +1251,19 @@ parser_error_t readSections(parser_context_t *ctx, parser_tx_t *v) {
             case DISCRIMINANT_SIGNATURE:
                 CHECK_ERROR(readSignature(ctx, &v->transaction.sections.signatures[0]))
                 break;
-#if(0)
+
             case DISCRIMINANT_CIPHERTEXT:
                 CHECK_ERROR(readCiphertext(ctx, &v->transaction.sections.ciphertext))
                 break;
 
             case DISCRIMINANT_MASP_TX:
-                CHECK_ERROR(readMaspTx(ctx, &v->transaction.sections.maspTx))
+                CHECK_ERROR(readMaspTxSection(ctx, &v->transaction.sections.maspTx))
                 break;
 
             case DISCRIMINANT_MASP_BUILDER:
-                CHECK_ERROR(readMaspBuilder(ctx, &v->transaction.sections.maspBuilder))
+                CHECK_ERROR(readMaspBuilderSection(ctx, &v->transaction.sections.maspBuilder))
                 break;
-#endif
+
             default:
                 return parser_unexpected_field;
         }
@@ -836,7 +1286,7 @@ parser_error_t validateTransactionParams(parser_tx_t *txObj) {
         case Custom:
             break;
         case Transfer:
-            CHECK_ERROR(readTransferTxn(&txObj->transaction.sections.data.bytes, txObj))
+            CHECK_ERROR(readTransferTxn(&txObj->transaction.sections.data.bytes, &txObj->transaction.sections.maspBuilder, txObj))
             break;
         case InitAccount:
              CHECK_ERROR(readInitAccountTxn(&txObj->transaction.sections.data.bytes,&txObj->transaction.sections.extraData.bytes, txObj))

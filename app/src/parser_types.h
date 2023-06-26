@@ -166,6 +166,9 @@ typedef struct {
     bytes_t key;
     uint8_t has_shielded_hash;
     bytes_t shielded_hash;
+    // Only for MASP transfers
+    uint8_t has_sapling_builder_outputs;
+    bytes_t sapling_outputs;
 } tx_transfer_t;
 
 typedef struct {

@@ -88,7 +88,7 @@ static parser_error_t printTransferTxn( const parser_context_t *ctx,
             }
             break;
         case 1:
-            if (ctx->tx_obj->bond.has_source == 0) {
+            if (ctx->tx_obj->bond.has_source == 0) { // todo: check this
                 return parser_unexpected_value;
             }
             snprintf(outKey, outKeyLen, "Sender");
@@ -96,6 +96,9 @@ static parser_error_t printTransferTxn( const parser_context_t *ctx,
             break;
         case 2:
             snprintf(outKey, outKeyLen, "Destination");
+            if (ctx->tx_obj->transfer.has_shielded_hash){
+                    if (ctx->tx_obj.){}
+            }
             CHECK_ERROR(printAddress(ctx->tx_obj->transfer.target_address, outVal, outValLen, pageIdx, pageCount))
             break;
         case 3:
@@ -298,8 +301,7 @@ static parser_error_t printVoteProposalTxn(  const parser_context_t *ctx,
                         {
                             char strVote[5] = {0};
                             const char* prefix = NULL;
-                            prefix = PIC("yay");
-                            snprintf((char*) strVote, strlen(prefix) + 1, "%s", prefix);
+                            snprintf((char*) strVote, strlen(prefix) + 1, "%s", "yay");
                             pageString(outVal, outValLen, (const char*) strVote, pageIdx, pageCount);
                             break;
                         }
@@ -312,8 +314,7 @@ static parser_error_t printVoteProposalTxn(  const parser_context_t *ctx,
                         {
                             char strVote[25] = {0};
                             const char* prefix = NULL;
-                            prefix = PIC("yay with Eth bridge");
-                            snprintf((char*) strVote, strlen(prefix) + 1, "%s", prefix);
+                            snprintf((char*) strVote, strlen(prefix) + 1, "%s", "yay with Eth bridge");
                             pageString(outVal, outValLen, (const char*) strVote, pageIdx, pageCount);
                             break;
                         }
