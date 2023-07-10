@@ -84,6 +84,11 @@ __Z_INLINE void app_reject() {
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
 }
 
+__Z_INLINE void app_reply_key() {
+    set_code(G_io_apdu_buffer, key_state.len, APDU_CODE_OK);
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, key_state.len + 2);
+}
+
 __Z_INLINE void app_reply_address() {
     set_code(G_io_apdu_buffer, action_addrResponse.len, APDU_CODE_OK);
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, action_addrResponse.len + 2);

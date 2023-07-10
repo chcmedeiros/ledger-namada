@@ -20,3 +20,13 @@
 #define CHECKSUM_SIZE           4
 #define VERSION_P2SH            0x1CBD
 #define VERSION_P2PKH           0x1CB8
+
+#define ZIP32_SEED_SIZE         64
+
+#define ED25519_SK_SIZE         64
+
+#define MASK_HARDENED           0x80000000
+
+#define CTX_EXPAND_SEED "MASP__ExpandSeed"
+#define CTX_EXPAND_SEED_LEN 16
+#define CTX_EXPAND_SEED_HASH_LEN 64

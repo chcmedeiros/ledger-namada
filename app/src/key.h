@@ -1,5 +1,5 @@
 /*******************************************************************************
-*  (c) 2018 - 2022 Zondax AG
+*   (c) 2020 Zondax AG
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
 *  you may not use this file except in compliance with the License.
@@ -13,21 +13,21 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 ********************************************************************************/
-#pragma once
 
-#include "parser_common.h"
-#include <zxmacros.h>
-#include "zxtypes.h"
-#include "parser_txdef.h"
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-parser_error_t _read(parser_context_t *c, parser_tx_t *v);
-parser_error_t getNumItems(const parser_context_t *ctx, uint8_t *numItems);
-parser_error_t _readUInt32(parser_context_t *ctx, uint32_t *value);
+/// Return the number of items in the address view
+zxerr_t key_getNumItems(uint8_t *num_items);
 
+/// Gets an specific item from the address view (including paging)
+zxerr_t key_getItem(int8_t displayIdx,
+                    char *outKey, uint16_t outKeyLen,
+                    char *outValue, uint16_t outValueLen,
+                    uint8_t pageIdx, uint8_t *pageCount);
 
 #ifdef __cplusplus
 }

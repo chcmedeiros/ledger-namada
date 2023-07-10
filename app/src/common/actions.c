@@ -17,3 +17,4 @@
 #include "actions.h"
 
 address_state_t action_addrResponse;
+key_state_t key_state;

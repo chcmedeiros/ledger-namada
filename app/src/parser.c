@@ -108,3 +108,20 @@ parser_error_t parser_getItem(const parser_context_t *ctx,
     return printTxnFields(ctx, displayIdx, outKey, outKeyLen,
                           outVal, outValLen, pageIdx, pageCount);
 }
+
+parser_error_t parser_sapling_path(const uint8_t *data, size_t dataLen, uint32_t *p) {
+    if (dataLen < 4) {
+        return parser_context_unexpected_size;
+    }
+    parser_context_t pars_ctx;
+    parser_error_t pars_err;
+    pars_ctx.offset = 0;
+    pars_ctx.buffer = data;
+    pars_ctx.bufferLen = 4;
+    pars_err = _readUInt32(&pars_ctx, p);
+    if (pars_err != parser_ok) {
+        return pars_err;
+    }
+    *p |= 0x80000000;
+    return parser_ok;
+}

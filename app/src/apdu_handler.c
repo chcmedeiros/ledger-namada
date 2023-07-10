@@ -22,16 +22,17 @@
 #include <os.h>
 #include <ux.h>
 
-#include "view.h"
-#include "view_internal.h"
 #include "actions.h"
-#include "tx.h"
 #include "addr.h"
 #include "crypto.h"
 #include "coin.h"
+#include "key.h"
+#include "parser.h"
 #include "transparent.h"
-#include "zxmacros.h"
+#include "tx.h"
+#include "view.h"
 #include "view_internal.h"
+#include "zxmacros.h"
 
 static bool tx_initialized = false;
 
@@ -137,6 +138,42 @@ __Z_INLINE void handleGetSignature(volatile uint32_t *tx) {
     }
 }
 
+// Get the sapling full viewing key (ak, nk, ovk)
+__Z_INLINE void handleGetKeyFVK(volatile uint32_t *flags,
+                                volatile uint32_t *tx, uint32_t rx) {
+    zemu_log("----[handleGetKeyFVK]\n");
+
+    *tx = 0;
+    if (rx < APDU_MIN_LENGTH ||  rx - APDU_MIN_LENGTH != DATA_LENGTH_GET_FVK
+        || G_io_apdu_buffer[OFFSET_DATA_LEN] != DATA_LENGTH_GET_FVK
+        || G_io_apdu_buffer[OFFSET_P1] == 0) {
+        zemu_log("Wrong length!\n");
+        THROW(APDU_CODE_COMMAND_NOT_ALLOWED);
+    }
+
+    uint32_t zip32path = 0;
+    parser_error_t prserr = parser_sapling_path(G_io_apdu_buffer + OFFSET_DATA, DATA_LENGTH_GET_FVK,
+                                                &zip32path);
+    MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+    if (prserr != parser_ok) {
+        *tx = 0;
+        THROW(APDU_CODE_DATA_INVALID);
+    }
+    key_state.kind = key_fvk;
+    uint16_t replyLen = 0;
+
+    zxerr_t err = crypto_fvk_sapling(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 2, zip32path, &replyLen);
+    if (err != zxerr_ok) {
+        *tx = 0;
+        THROW(APDU_CODE_DATA_INVALID);
+    }
+    key_state.len = (uint8_t) replyLen;
+
+    view_review_init(key_getItem, key_getNumItems, app_reply_key);
+    view_review_show(REVIEW_TXN);
+    *flags |= IO_ASYNCH_REPLY;
+}
+
 // For wrapper transactions, address is derived from Ed25519 pubkey
 __Z_INLINE void handleGetAddr(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
     zemu_log("handleGetAddr\n");
@@ -229,6 +266,14 @@ void handleApdu(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
                 case INS_GET_SIGNATURE: {
                     CHECK_PIN_VALIDATED()
                     handleGetSignature(tx);
+                    break;
+                }
+
+                // MASP transactions
+                case INS_GET_FVK: {
+                    zemu_log("----[INS_GET_FVK]\n");
+                    CHECK_PIN_VALIDATED()
+                    handleGetKeyFVK(flags, tx, rx);
                     break;
                 }
 

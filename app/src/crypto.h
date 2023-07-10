@@ -47,6 +47,7 @@ zxerr_t crypto_signHeader(const header_t *header, const bytes_t *pubkey);
 zxerr_t crypto_signDataSection(const section_t *data, const bytes_t *pubkey);
 zxerr_t crypto_signCodeSection(const section_t *code, const bytes_t *pubkey);
 zxerr_t crypto_getSignature(uint8_t *output, uint16_t outputLen, uint8_t slot);
+zxerr_t crypto_fvk_sapling(uint8_t *buffer, uint16_t bufferLen, uint32_t p, uint16_t *replyLen);
 
 #ifdef __cplusplus
 }

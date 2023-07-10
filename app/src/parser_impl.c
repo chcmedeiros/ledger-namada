@@ -97,6 +97,16 @@ parser_error_t getNumItems(const parser_context_t *ctx, uint8_t *numItems) {
     return parser_ok;
 }
 
+parser_error_t _readUInt32(parser_context_t *ctx, uint32_t *value) 
+{                                                                                           
+    if (value == NULL)  return parser_no_data;                                              
+    *value = 0u;                                                                            
+    for(uint8_t i=0u; i < (32u>>3u); i++, ctx->offset++) {                              
+        if (ctx->offset >= ctx->bufferLen) return parser_unexpected_buffer_end;             
+        *value += (uint32_t) *(ctx->buffer + ctx->offset) << (8u*i);               
+    }                                                                                       
+    return parser_ok;                                                                       
+}
 
 const char *parser_getErrorDescription(parser_error_t err) {
     switch (err) {
@@ -131,6 +141,8 @@ const char *parser_getErrorDescription(parser_error_t err) {
             return "decimal cannot be parsed";
         case parser_invalid_output_buffer:
             return "invalid output buffer";
+        case parser_context_unexpected_size:
+            return "context unexpected size";
         default:
             return "Unrecognized error code";
     }

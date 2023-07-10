@@ -44,6 +44,9 @@ parser_error_t parser_getItem(const parser_context_t *ctx,
                               char *outVal, uint16_t outValLen,
                               uint8_t pageIdx, uint8_t *pageCount);
 
+//parser_error_t parser_sapling_path_with_div(const uint8_t *data, size_t dataLen, parser_addr_div_t *prs);
+parser_error_t parser_sapling_path(const uint8_t *data, size_t dataLen, uint32_t *p);
+
 #ifdef __cplusplus
 }
 #endif
