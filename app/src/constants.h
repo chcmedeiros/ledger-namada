@@ -21,6 +21,8 @@
 #define VERSION_P2SH            0x1CBD
 #define VERSION_P2PKH           0x1CB8
 
+#define ASSET_IDENTIFIER_LENGTH 32
+
 // NVDATA file
 #define PATH_SIZE               5
 #define SCRIPT_SIZE             26

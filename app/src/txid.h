@@ -22,3 +22,4 @@ void nu5_transparent_prevouts_hash(const uint8_t *input, uint8_t *output);
 
 void nu5_transparent_sequence_hash(const uint8_t *input, uint8_t *output);
 
+void nu5_transparent_outputs_hash(uint8_t *output);

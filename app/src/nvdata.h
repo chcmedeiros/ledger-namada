@@ -23,6 +23,7 @@ typedef struct {
     uint32_t path[PATH_SIZE];
     uint8_t script[SCRIPT_SIZE];
     uint64_t value;
+    uint8_t asset_type_id[ASSET_IDENTIFIER_LENGTH]; // [u8;32]
 } t_input_item_t;
 
 typedef struct {

@@ -586,7 +586,7 @@ zxerr_t crypto_extracttx_sapling(uint8_t *buffer, uint16_t bufferLen, const uint
         random_fr(rnd1);
         random_fr(rnd2);
 
-        // This needs to be parametrised by the asset type (of v)
+        // todo : This needs to be parametrised by the asset type (of v)
         zxerr_t err = spendlist_append_item(p, v, div, pkd, rnd1, rnd2);
         if (err != zxerr_ok) {
             return (zxerr_t) EXTRACT_SAPLING_E9;
@@ -823,3 +823,33 @@ zxerr_t crypto_check_outputs(uint8_t *buffer, uint16_t bufferLen, const uint8_t 
     return zxerr_ok;
 }
 
+// handleCheckandSign step 5/11
+zxerr_t crypto_check_valuebalance(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata, const uint8_t tx_version){
+    zemu_log_stack("crypto_check_valuebalance");
+    MEMZERO(buffer, bufferLen);
+
+    if(get_state() != STATE_CHECKING_ALL_TXDATA){
+        return zxerr_unknown;
+    }
+    parser_context_t pars_ctx;
+    parser_error_t pars_err;
+    size_t value_balance_offset = 0;
+
+    value_balance_offset = NU5_INDEX_HASH_VALUEBALANCE;
+
+    pars_ctx.offset = 0;
+    pars_ctx.buffer = txdata + start_sighashdata() +  value_balance_offset;
+    pars_ctx.bufferLen = 8;
+    int64_t v = 0;
+    pars_err = _readInt64(&pars_ctx, &v);
+    if (pars_err != parser_ok){
+        return 0;
+    }
+
+    int64_t valuebalance = get_valuebalance();
+    int64_t *value_flash = (int64_t *)&valuebalance;
+    if(MEMCMP(&v, value_flash, 8) != 0){
+        return zxerr_unknown;
+    }
+    return zxerr_ok;
+}
