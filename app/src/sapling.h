@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>   // uint*_t
 #include "sapling_keys.h"
 
@@ -8,11 +12,13 @@
 // Exists but not needed out of sapling.c yet:
 // static void get_expanded_spending_key_from_seed(uint8_t *seed, expanded_spending_key_t* out);
 
+// todo: implement the following
 //void get_cmu(uint8_t *cmu, uint8_t *d, uint8_t *pkd, uint64_t value, uint8_t *rseed);
 //void sapling_sign(uint8_t *signature, uint8_t *sig_hash);
 
 //int test_cmu(uint8_t *data);
 
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
 typedef struct {
     cx_bn_t u;
     cx_bn_t v;
@@ -27,6 +33,7 @@ typedef struct {
     cx_bn_t z;   // z
     cx_bn_t t2d; // t1.t2.2d
 } jj_en_t; // jubjub extended niels
+#endif
 
 typedef struct {
     uint8_t vpu[32]; // v+u
@@ -226,3 +233,7 @@ static const ff_jj_en_t CMU_RAND_GEN = {
             0xB6, 0x9D, 0x5D, 0xA6, 0x98, 0xAB, 0x5B, 0x20, 0xDC, 0x0A,
         },
 };
+
+#ifdef __cplusplus
+}
+#endif

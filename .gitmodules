@@ -10,3 +10,6 @@
 [submodule "deps/nanos-secure-sdk"]
 	path = deps/nanos-secure-sdk
 	url = https://github.com/LedgerHQ/nanos-secure-sdk
+[submodule "deps/sapling-rust"]
+	path = deps/sapling-rust
+	url = https://github.com/IdaTucker/sapling.git

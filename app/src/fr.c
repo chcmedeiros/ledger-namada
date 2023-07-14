@@ -20,7 +20,31 @@
 #include <stdbool.h>  // bool
 #include <os.h>       // sprintf
 
+#include "lcx_rng.h"
 #include "fr.h"
+
+#include <stdint.h>
+
+typedef struct {
+    uint64_t limbs[4];
+} jubjub_fr;
+
+// Generate a random jubjub scalar (Fr)
+void random_fr(uint8_t* alpha_ptr) {
+    jubjub_fr fr;
+    uint64_t rng_1;
+    uint64_t rng_2;
+    cx_rng_no_throw((uint8_t*)&rng_1, sizeof (uint64_t));
+    cx_rng_no_throw((uint8_t*)&rng_2, sizeof (uint64_t));
+    // Generate random values for each limb
+    for (int i = 0; i < 4; i++) {
+        fr.limbs[i] = rng_1 | (rng_2 << 32);
+    }
+
+    // Copy the generated scalar to the output pointer
+    memcpy(alpha_ptr, &fr, sizeof(jubjub_fr));
+}
+
 
 void swap_endian(uint8_t *data, int8_t len) {
     for (int8_t i = 0; i < len / 2; i++) {
@@ -38,26 +62,6 @@ void swap_bit_endian(uint8_t *data, int8_t len) {
         b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
         data[i] = b;
     }
-}
-
-void fp_from_wide(uint8_t *data_512) {
-    swap_endian(data_512, 64);
-    fp_from_wide_be(data_512);
-}
-
-void fp_from_wide_be(uint8_t *data_512) {
-    cx_math_modm_no_throw(data_512, 64, fp_m, 32);
-    memmove(data_512, data_512 + 32, 32);
-}
-
-void fv_from_wide(uint8_t *data_512) {
-    swap_endian(data_512, 64);
-    fv_from_wide_be(data_512);
-}
-
-void fv_from_wide_be(uint8_t *data_512) {
-    cx_math_modm_no_throw(data_512, 64, fv_m, 32);
-    memmove(data_512, data_512 + 32, 32);
 }
 
 #ifdef TEST

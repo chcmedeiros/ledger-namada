@@ -108,6 +108,17 @@ parser_error_t _readUInt32(parser_context_t *ctx, uint32_t *value)
     return parser_ok;                                                                       
 }
 
+parser_error_t _readUInt64(parser_context_t *ctx, uint64_t *value)
+{
+    if (value == NULL)  return parser_no_data;
+    *value = 0u;
+    for(uint8_t i=0u; i < (64u>>3u); i++, ctx->offset++) {
+        if (ctx->offset >= ctx->bufferLen) return parser_unexpected_buffer_end;
+        *value += (uint64_t) *(ctx->buffer + ctx->offset) << (8u*i);
+    }
+    return parser_ok;
+}
+
 const char *parser_getErrorDescription(parser_error_t err) {
     switch (err) {
         case parser_ok:

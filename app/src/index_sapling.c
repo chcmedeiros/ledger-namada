@@ -1,5 +1,5 @@
 /*******************************************************************************
-*  (c) 2018 - 2022 Zondax AG
+*   (c) 2020 Zondax AG
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
 *  you may not use this file except in compliance with the License.
@@ -13,22 +13,30 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 ********************************************************************************/
-#pragma once
 
-#include "parser_common.h"
-#include <zxmacros.h>
-#include "zxtypes.h"
-#include "parser_txdef.h"
+#include "index_sapling.h"
+#include "nvdata.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+uint16_t length_t_in_data() {
+    return t_inlist_len() * T_IN_TX_LEN;
+};
 
-parser_error_t _read(parser_context_t *c, parser_tx_t *v);
-parser_error_t getNumItems(const parser_context_t *ctx, uint8_t *numItems);
-parser_error_t _readUInt32(parser_context_t *ctx, uint32_t *value);
-parser_error_t _readUInt64(parser_context_t *ctx, uint64_t *value);
-
-#ifdef __cplusplus
+uint16_t length_spend_old_data() {
+    return spendlist_len() * SPEND_OLD_TX_LEN;
 }
-#endif
+
+uint16_t length_spenddata() {
+    return spendlist_len() * (SPEND_TX_LEN + SPEND_OLD_TX_LEN);
+};
+
+uint16_t length_outputdata() {
+    return outputlist_len() * OUTPUT_TX_LEN;
+};
+
+uint16_t length_spend_new_data() {
+    return spendlist_len() * SPEND_TX_LEN;
+};
+
+uint16_t start_sighashdata() {
+    return length_t_in_data() + length_spenddata() + length_outputdata();
+};

@@ -124,16 +124,21 @@ file(GLOB_RECURSE LIB_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/app/src/parser_impl_txn.c
         ${CMAKE_CURRENT_SOURCE_DIR}/app/src/crypto_helper.c
         ${CMAKE_CURRENT_SOURCE_DIR}/app/src/leb128.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/src/sapling.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/src/nvdata.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/deps/sapling-rust/app/rust/src/zip32.rs
         )
 
 add_library(app_lib STATIC ${LIB_SRC})
 
 target_include_directories(app_lib PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/deps/ledger-zxlib/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/deps/ledger-zxlib/app/ui
         ${CMAKE_CURRENT_SOURCE_DIR}/app/src
         ${CMAKE_CURRENT_SOURCE_DIR}/app/src/lib
         ${CMAKE_CURRENT_SOURCE_DIR}/app/src/common
         ${CMAKE_CURRENT_SOURCE_DIR}/deps/picohash/
+        ${CMAKE_CURRENT_SOURCE_DIR}/deps/sapling-rust/app/rust/include
         )
 
 ##############################################################

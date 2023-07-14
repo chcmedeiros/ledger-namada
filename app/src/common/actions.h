@@ -16,13 +16,15 @@
 #pragma once
 
 #include <stdint.h>
-#include "crypto.h"
-#include "tx.h"
-#include "apdu_codes.h"
 #include <os_io_seproxyhal.h>
+
+#include "apdu_codes.h"
 #include "coin.h"
-#include "zxerror.h"
+#include "crypto.h"
+#include "parser.h"
 #include "parser_txdef.h"
+#include "tx.h"
+#include "zxerror.h"
 #include "zxformat.h"
 
 typedef struct {
@@ -87,6 +89,12 @@ __Z_INLINE void app_reject() {
 __Z_INLINE void app_reply_key() {
     set_code(G_io_apdu_buffer, key_state.len, APDU_CODE_OK);
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, key_state.len + 2);
+}
+
+__Z_INLINE void app_reply_hash() {
+    view_tx_state();
+    set_code(G_io_apdu_buffer, 32, APDU_CODE_OK);
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 32 + 2);
 }
 
 __Z_INLINE void app_reply_address() {

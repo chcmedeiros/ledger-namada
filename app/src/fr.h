@@ -1,6 +1,9 @@
 #pragma once
 
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
 #include <lcx_math.h>
+#endif
+
 #include <stddef.h>  // size_t
 #include <stdint.h>  // uint*_t
 
@@ -51,38 +54,6 @@ void swap_endian(uint8_t *data, int8_t len);
 /// @param len length of the array
 void swap_bit_endian(uint8_t *data, int8_t len);
 
-/// @brief Convert a 512 bit Little Endian number into Fr
-/// @param data_512 pointer to the beginning of the data
-void fr_from_wide(uint8_t *data_512);
-
-/// @brief Convert a 512 bit Little Endian number into Fv
-/// @param data_512 pointer to the beginning of the data
-void fv_from_wide(uint8_t *data_512);
-void fv_from_wide_be(uint8_t *data_512);
-
-void fp_from_wide(uint8_t *data_512);
-void fp_from_wide_be(uint8_t *data_512);
-
-static inline int fp_ok(fq_t *v) {
-    int diff;
-    cx_math_cmp_no_throw((uint8_t *)v, fp_m, 32, &diff);
-    return diff < 0;
-}
-
-static inline void fv_negate(fv_t *v) {
-    fv_t zero;
-    memset(&zero, 0, 32);
-    cx_math_subm_no_throw((uint8_t *)v, (uint8_t *)zero, (uint8_t *)v, fv_m, 32);
-}
-
-static inline void fv_add(fv_t *v, const fv_t *a, const fv_t *b) {
-    cx_math_addm_no_throw((uint8_t *)v, (uint8_t *)a, (uint8_t *)b, fv_m, 32);
-}
-
-static inline void fv_mult(fv_t *v, const fv_t *a, const fv_t *b) {
-    cx_math_multm_no_throw((uint8_t *)v, (uint8_t *)a, (uint8_t *)b, fv_m, 32);
-}
-
 #ifdef TEST
 void print_bn_internal(const char *label, cx_bn_t bn);
 #define print_bn(label, bn) print_bn_internal(label, bn)
@@ -92,6 +63,8 @@ void print_bn_internal(const char *label, cx_bn_t bn);
 
 int ff_is_zero(uint8_t *v);
 
+// Generate a random jubjub scalar (Fr)
+void random_fr(uint8_t *alpha_ptr);
+
 #define BN_DEF(a) cx_bn_t a; CX_THROW(cx_bn_alloc(&a, 32));
-#define BN_DEF_ZERO BN_DEF(zero); cx_bn_set_u32(zero, 0);
 

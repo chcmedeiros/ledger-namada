@@ -17,7 +17,6 @@
 #include "parser_txdef.h"
 #include "leb128.h"
 #include "bech32.h"
-#include "stdbool.h"
 
 #define ADDRESS_LEN_BYTES   45
 

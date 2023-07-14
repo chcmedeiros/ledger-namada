@@ -15,17 +15,24 @@
 ********************************************************************************/
 
 #include "bech32.h"
-#include "crypto.h"
 #include "coin.h"
 #include "constants.h"
-#include "cx.h"
-#include "tx.h"
+#include "crypto.h"
+#include "crypto_helper.h"
+#include "fr.h"
+#include "index_sapling.h"
+#include "leb128.h"
+#include "nvdata.h"
+#include "parser_impl.h"
+#include "sapling.h"
 #include "zxmacros.h"
 #include "zxformat.h"
-#include "crypto_helper.h"
-#include "leb128.h"
+#include "tx.h"
+
+#include "cx.h"
 #include "cx_sha256.h"
-#include "sapling.h"
+#include "lcx_rng.h"
+
 
 #define SIGN_PREFIX_SIZE 11u
 #define SIGN_PREHASH_SIZE (SIGN_PREFIX_SIZE + CX_SHA256_SIZE)
@@ -46,6 +53,24 @@ typedef enum {
     signature_data,
     signature_code,
 } signature_slot_e;
+
+
+typedef enum {
+    EXTRACT_SAPLING_E0 = 0xE0,
+    EXTRACT_SAPLING_E1 = 0xE1,
+    EXTRACT_SAPLING_E2 = 0xE2,
+    EXTRACT_SAPLING_E3 = 0xE3,
+    EXTRACT_SAPLING_E4 = 0xE4,
+    EXTRACT_SAPLING_E5 = 0xE5,
+    EXTRACT_SAPLING_E6 = 0xE6,
+    EXTRACT_SAPLING_E7 = 0xE7,
+    EXTRACT_SAPLING_E8 = 0xE8,
+    EXTRACT_SAPLING_E9 = 0xE9,
+    EXTRACT_SAPLING_EA = 0xEA,
+    EXTRACT_SAPLING_EB = 0xEB,
+    EXTRACT_SAPLING_EC = 0xEC,
+    EXTRACT_SAPLING_ED = 0xED,
+} extract_sapling_e;
 
 typedef struct {
     uint8_t r[32];
@@ -462,5 +487,166 @@ zxerr_t crypto_fvk_sapling(uint8_t *buffer, uint16_t bufferLen, uint32_t p, uint
     }
 
     *replyLen = AK_SIZE + NK_SIZE + OVK_SIZE + DK_SIZE;
+    return zxerr_ok;
+}
+
+// handleInitTX step 1/2
+zxerr_t crypto_extracttx_sapling(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata, const uint16_t txdatalen) {
+    zemu_log_stack("crypto_extracttx_sapling");
+    MEMZERO(buffer, bufferLen);
+    uint8_t t_in_len = *txdata;
+    uint8_t t_out_len = *(txdata + 1);
+    uint8_t spend_len = *(txdata + 2);
+    uint8_t output_len = *(txdata + 3);
+
+    transaction_reset();
+
+    if ((spend_len > 0 && output_len < 2) || (spend_len == 0 && output_len == 1)) {
+        return (zxerr_t) EXTRACT_SAPLING_E0;
+    }
+
+    if (txdatalen < 4 || txdatalen - 4 !=
+                         t_in_len * T_IN_INPUT_LEN + t_out_len * T_OUT_INPUT_LEN + spend_len * SPEND_INPUT_LEN +
+                         output_len * OUTPUT_INPUT_LEN) {
+        return (zxerr_t) EXTRACT_SAPLING_E1;
+    }
+
+    if (t_in_len == 0 && t_out_len == 0 && spend_len == 0 && output_len == 0) {
+        return (zxerr_t) EXTRACT_SAPLING_E2;
+    }
+
+    uint8_t *start = (uint8_t *) txdata;
+    start += 4;
+
+    parser_context_t pars_ctx;
+    parser_error_t pars_err;
+
+    for (int i = 0; i < t_in_len; i++) {
+        uint32_t *path = (uint32_t * )(start + INDEX_INPUT_TIN_PATH);
+        uint8_t *script = (uint8_t * )(start + INDEX_INPUT_TIN_SCRIPT);
+
+        pars_ctx.offset = 0;
+        pars_ctx.buffer = start + INDEX_INPUT_TIN_VALUE;
+        pars_ctx.bufferLen = 8;
+        uint64_t v = 0;
+        pars_err = _readUInt64(&pars_ctx, &v);
+        if (pars_err != parser_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_E3;
+        }
+        zxerr_t err = t_inlist_append_item(path, script, v);
+        if (err != zxerr_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_E4;
+        }
+        start += T_IN_INPUT_LEN;
+    }
+
+    for (int i = 0; i < t_out_len; i++) {
+        uint8_t *addr = (uint8_t * )(start + INDEX_INPUT_TOUT_ADDR);
+        pars_ctx.offset = 0;
+        pars_ctx.buffer = start + INDEX_INPUT_TOUT_VALUE;
+        pars_ctx.bufferLen = 8;
+        uint64_t v = 0;
+        pars_err = _readUInt64(&pars_ctx, &v);
+        if (pars_err != parser_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_E5;
+        }
+        zxerr_t err = t_outlist_append_item(addr, v);
+        if (err != zxerr_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_E6;
+        }
+        start += T_OUT_INPUT_LEN;
+    }
+
+    for (int i = 0; i < spend_len; i++) {
+        pars_ctx.offset = 0;
+        pars_ctx.buffer = start + INDEX_INPUT_SPENDPOS;
+        pars_ctx.bufferLen = 4;
+        uint32_t p = 0;
+        pars_err = _readUInt32(&pars_ctx, &p);
+        if (pars_err != parser_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_E7;
+        }
+
+        pars_ctx.offset = 0;
+        pars_ctx.buffer = start + INDEX_INPUT_INPUTVALUE;
+        pars_ctx.bufferLen = 8;
+        uint64_t v = 0;
+        pars_err = _readUInt64(&pars_ctx, &v);
+        if (pars_err != parser_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_E8;
+        }
+
+        uint8_t *div = start + INDEX_INPUT_INPUTDIV;
+        uint8_t *pkd = start + INDEX_INPUT_INPUTPKD;
+        uint8_t rnd1[RND_SIZE];
+        uint8_t rnd2[RND_SIZE];
+        random_fr(rnd1);
+        random_fr(rnd2);
+
+        zxerr_t err = spendlist_append_item(p, v, div, pkd, rnd1, rnd2);
+        if (err != zxerr_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_E9;
+        }
+        start += SPEND_INPUT_LEN;
+    }
+
+    for (int i = 0; i < output_len; i++) {
+        uint8_t *div = start + INDEX_INPUT_OUTPUTDIV;
+        uint8_t *pkd = start + INDEX_INPUT_OUTPUTPKD;
+
+        pars_ctx.offset = 0;
+        pars_ctx.buffer = start + INDEX_INPUT_OUTPUTVALUE;
+        pars_ctx.bufferLen = 8;
+        uint64_t v = 0;
+        pars_err = _readUInt64(&pars_ctx, &v);
+        if (pars_err != parser_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_EA;
+        }
+
+        uint8_t *memotype = start + INDEX_INPUT_OUTPUTMEMO;
+        uint8_t *ovk = start + INDEX_INPUT_OUTPUTOVK;
+        if (ovk[0] != 0x00 && ovk[0] != 0x01) {
+            return (zxerr_t) EXTRACT_SAPLING_EB;
+        }
+        uint8_t hash_seed[OVK_SET_SIZE];
+        if (ovk[0] == 0x00) {
+            MEMZERO(hash_seed, OVK_SET_SIZE);
+            cx_rng_no_throw(hash_seed + 1, OVK_SIZE);
+            ovk = hash_seed;
+        }
+
+        uint8_t rnd1[RND_SIZE];
+        uint8_t rnd2[RND_SIZE];
+        random_fr(rnd1);
+        cx_rng_no_throw(rnd2, RND_SIZE);
+        zxerr_t err = outputlist_append_item(div, pkd, v, *memotype, ovk, rnd1, rnd2);
+        if (err != zxerr_ok) {
+            return (zxerr_t) EXTRACT_SAPLING_EC;
+        }
+        start += OUTPUT_INPUT_LEN;
+    }
+
+    uint64_t value_flash = get_totalvalue();
+    if (value_flash != 1000) {
+        return (zxerr_t) EXTRACT_SAPLING_ED;
+    }
+
+    if (spend_len > 0) {
+        set_state(STATE_PROCESSED_INPUTS); //need both spend info and output info (as spend > 0 => output >= 2)
+    } else if (output_len > 0) {
+        set_state(STATE_PROCESSED_SPEND_EXTRACTIONS); //we can have shielded outputs only
+    } else {
+        set_state(STATE_PROCESSED_ALL_EXTRACTIONS); //We can have transparent inputs/outputs only
+    }
+
+    return zxerr_ok; //some code for all_good
+}
+
+// handleInitTX step 2/2 -- AND -- handleCheckandSign step 11/11
+zxerr_t crypto_hash_messagebuffer(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata, uint16_t txdataLen){
+    if(bufferLen < CX_SHA256_SIZE){
+        return zxerr_unknown;
+    }
+    cx_hash_sha256(txdata, txdataLen, buffer, CX_SHA256_SIZE);      // SHA256
     return zxerr_ok;
 }

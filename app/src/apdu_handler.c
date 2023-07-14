@@ -20,13 +20,14 @@
 #include <string.h>
 #include <os_io_seproxyhal.h>
 #include <os.h>
-#include <ux.h>
 
 #include "actions.h"
 #include "addr.h"
 #include "crypto.h"
 #include "coin.h"
 #include "key.h"
+#include "masp_apdu_errors.h"
+#include "nvdata.h"
 #include "parser.h"
 #include "transparent.h"
 #include "tx.h"
@@ -137,6 +138,45 @@ __Z_INLINE void handleGetSignature(volatile uint32_t *tx) {
         THROW(APDU_CODE_CONDITIONS_NOT_SATISFIED);
     }
 }
+
+// Process initial MASP transaction blob for later signing
+__Z_INLINE void handleInitMASPTransfer(volatile uint32_t *flags,
+                                volatile uint32_t *tx, uint32_t rx) {
+    if (!process_chunk(tx, rx)) {
+        THROW(APDU_CODE_OK);
+    }
+
+    zemu_log("----[handleInitMASPTransfer]\n");
+
+    *tx = 0;
+    const uint8_t *message = tx_get_buffer();
+    const uint16_t messageLength = tx_get_buffer_length();
+
+    zxerr_t err = crypto_extracttx_sapling(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength);
+    if (err != zxerr_ok) {
+        transaction_reset();
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        G_io_apdu_buffer[0] = err;
+        *tx = 1;
+        THROW(APDU_CODE_EXTRACT_TRANSACTION_FAIL);
+    }
+
+    err = crypto_hash_messagebuffer(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength);
+    if (err != zxerr_ok) {
+        transaction_reset();
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        G_io_apdu_buffer[0] = err;
+        *tx = 1;
+        THROW(APDU_CODE_HASH_MSG_BUF_FAIL);
+    }
+
+    view_review_init(tx_getItem, tx_getNumItems, app_reply_hash);
+
+    view_review_show(REVIEW_TXN);
+    *flags |= IO_ASYNCH_REPLY;
+
+}
+
 
 // Get the sapling full viewing key (ak, nk, ovk)
 __Z_INLINE void handleGetKeyFVK(volatile uint32_t *flags,
@@ -274,6 +314,13 @@ void handleApdu(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
                     zemu_log("----[INS_GET_FVK]\n");
                     CHECK_PIN_VALIDATED()
                     handleGetKeyFVK(flags, tx, rx);
+                    break;
+                }
+
+                case INS_INIT_MASP_TRANSFER: {
+                    zemu_log("----[INS_INIT_MASP_TRANSFER]\n");
+                    CHECK_PIN_VALIDATED()
+                    handleInitMASPTransfer(flags, tx, rx);
                     break;
                 }
 

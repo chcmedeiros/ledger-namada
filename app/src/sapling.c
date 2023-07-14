@@ -1,30 +1,41 @@
+/*******************************************************************************
+*  (c) 2018 - 2023 Zondax AG
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*      http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+********************************************************************************/
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>   // uint*_t
-#include <lcx_ecfp.h>
-#include <lcx_hash.h>
-#include <ox_bn.h>
-#include "cx_blake2.h"
 #include "constants.h"
 #include "ff1.h"
 #include "zxformat.h"
 #include "zxmacros.h"
 
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
+
+#else
+    #include "../../deps/sapling-rust/app/rust/include/rslib.h"
+#endif
+
 const uint32_t FIRSTVALUE = 0x80000020; // 32^0x80000000;
 const uint32_t COIN_TYPE = 0x8000036d; // 877^0x80000000; hardened, fixed value from slip-0044
-
-static cx_bn_t M; // M is the modulus in the base field of jubjub, Fq
-#ifndef NO_MONTGOMERY
-static const uint8_t mont_h[] = {
-        0x07, 0x48, 0xd9, 0xd9, 0x9f, 0x59, 0xff, 0x11, 0x05, 0xd3, 0x14, 0x96, 0x72, 0x54, 0x39, 0x8f, 0x2b, 0x6c, 0xed, 0xcb, 0x87, 0x92, 0x5c, 0x23, 0xc9, 0x99, 0xe9, 0x90, 0xf3, 0xf2, 0x9c, 0x6d
-};
-#endif
 #include "fr.h"
-#include "mont.h"
 #include "sapling.h"
 
-void e_to_en(jj_en_t *dest, jj_e_t *src);
-void e_double(jj_e_t *r);
-void een_add_assign(jj_e_t *x, jj_en_t *y);
 void get_expanded_spending_key_from_seed(uint8_t *seed, expanded_spending_key_t* out);
+
 
 /// q is the modulus of Fq
 /// q = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
@@ -88,6 +99,27 @@ static void little_endian_write_u32(uint32_t n, uint8_t* out, uint8_t out_len){
 }
 
 
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
+
+    #include "cx.h"
+    #include <lcx_ecfp.h>
+    #include <lcx_hash.h>
+    #include <ox_bn.h>
+    #include "cx_blake2.h"
+
+static cx_bn_t M; // M is the modulus in the base field of jubjub, Fq
+    #ifndef NO_MONTGOMERY
+    static const uint8_t mont_h[] = {
+        0x07, 0x48, 0xd9, 0xd9, 0x9f, 0x59, 0xff, 0x11, 0x05, 0xd3, 0x14, 0x96, 0x72, 0x54, 0x39, 0x8f, 0x2b, 0x6c, 0xed, 0xcb, 0x87, 0x92, 0x5c, 0x23, 0xc9, 0x99, 0xe9, 0x90, 0xf3, 0xf2, 0x9c, 0x6d
+    };
+    #endif
+
+    #include "mont.h"
+
+
+void e_to_en(jj_en_t *dest, jj_e_t *src);
+void e_double(jj_e_t *r);
+void een_add_assign(jj_e_t *x, jj_en_t *y);
 
 static void alloc_e(jj_e_t *r) {
     cx_bn_alloc(&r->u, 32);
@@ -163,11 +195,6 @@ void en_mul(jj_e_t *pk, jj_en_t *G, cx_bn_t sk) {
     }
     destroy_en(&id);
     PRINTF("\n");
-    // print_mont("u", pk->u);
-    // print_mont("v", pk->v);
-    // print_mont("z", pk->z);
-    // print_mont("t1", pk->t1);
-    // print_mont("t2", pk->t2);
 }
 
 void e_double(jj_e_t *r) {
@@ -207,12 +234,6 @@ void e_double(jj_e_t *r) {
     CX_MUL(r->u, r->t1, t);
     CX_MUL(r->v, r->t2, vmu);
     CX_MUL(r->z, vmu, t);
-
-    // print_mont("u", r->u);
-    // print_mont("v", r->v);
-    // print_mont("z", r->z);
-    // print_mont("t1", r->t1);
-    // print_mont("t2", r->t2);
 
     cx_bn_destroy(&temp);
     cx_bn_destroy(&t);
@@ -254,15 +275,6 @@ void een_add_assign(jj_e_t *x, jj_en_t *y) {
     BN_DEF(t);
     cx_bn_mod_add_fixed(z, d, c, M); // z = d + c
     cx_bn_mod_sub(t, d, c, M); // t = d - c
-
-    // print_bn("A", a);
-    // print_bn("B", b);
-    // print_bn("C", c);
-    // print_bn("D", d);
-    // print_bn("U", u);
-    // print_bn("V", v);
-    // print_bn("Z", z);
-    // print_bn("T", t);
 
     cx_bn_destroy(&a);
     cx_bn_destroy(&b);
@@ -358,7 +370,7 @@ int hash_to_e(jj_e_t *p, const uint8_t *msg, size_t len) {
     hash_params.digest_length = 32;
     hash_params.fanout = 1;
     hash_params.depth = 1;
-    memmove(&hash_params.personal, "Zcash_gd", 8);
+    memmove(&hash_params.personal, "MASP__gd", 8);
 
     blake2s_init_param(&hash_ctx, &hash_params);
     blake2s_update(&hash_ctx, "096b36a5804bfacef1691e173c366a47ff5ba84a44f26ddd7e8d9f79d5b42df0", 64);
@@ -428,11 +440,50 @@ int hash_to_e(jj_e_t *p, const uint8_t *msg, size_t len) {
 
     return cx_error;
 }
+void sk_to_pk(uint8_t *pkb, jj_en_t *G, cx_bn_t sk) {
+    jj_e_t pk; alloc_e(&pk);
+    en_mul(&pk, G, sk);
+    e_to_bytes(pkb, &pk);
+    destroy_e(&pk);
+}
 
+void ask_to_ak(uint8_t *ask_bytes, uint8_t *ak_out){
+    // ak is the byte representation of A = G.ask where G is the spending auth generator point
+    cx_bn_t ask;
+    CX_THROW(cx_bn_alloc(&ask, 32));
+    cx_bn_init(ask, ask_bytes, 32);
+    jj_en_t G;
+    alloc_en(&G);
+    load_en(&G, &SPENDING_GEN);
 
+    sk_to_pk(ak_out, &G, ask);
+    cx_bn_destroy(&ask);
+    destroy_en(&G);
+}
+
+void nsk_to_nk(uint8_t *nsk_bytes, uint8_t *nk_out){
+    cx_bn_t nsk;
+    CX_THROW(cx_bn_alloc(&nsk, 32));
+    cx_bn_init(nsk, nsk_bytes, 32);
+    jj_en_t G; alloc_en(&G); load_en(&G, &PROOF_GEN);
+    sk_to_pk(nk_out, &G, nsk);
+    cx_bn_destroy(&nsk);
+    destroy_en(&G);
+}
+#else
+void ask_to_ak(uint8_t *ask_bytes, uint8_t *ak_out){
+    sapling_ask_to_ak(ask_bytes,ak_out);
+}
+
+void nsk_to_nk(uint8_t *nsk_bytes, uint8_t *nk_out){
+    sapling_nsk_to_nk(nsk_bytes, nk_out);
+}
+#endif
+
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
 static void derive_master_spending_key_from_seed(uint8_t *seed, uint8_t* out_spending_key) {
     cx_blake2b_t ctx;
-    cx_blake2b_init2_no_throw(&ctx, 512, NULL, 0, (uint8_t *) "ZcashIP32Sapling", 16);
+    cx_blake2b_init2_no_throw(&ctx, 512, NULL, 0, (uint8_t *) "MASP_IP32Sapling", 16);
     cx_hash_no_throw(&ctx.header, CX_LAST, seed, ZIP32_SEED_SIZE, out_spending_key, 512);
 }
 
@@ -455,6 +506,22 @@ static void prf_expand(const uint8_t *sk, uint32_t sk_len,
     cx_hash_no_throw(&ctx.header, 0, sk, sk_len, NULL, 0);
     cx_hash_no_throw(&ctx.header, CX_LAST, t, t_len, out, CTX_EXPAND_SEED_HASH_LEN);
 }
+#else
+static void derive_master_spending_key_from_seed(uint8_t *seed, uint8_t* out_spending_key) {
+    master_spending_key_zip32(seed, out_spending_key);
+}
+
+void prf_expand(const uint8_t *sk, uint32_t sk_len,
+                       const uint8_t *t, uint32_t t_len,
+                       uint8_t *out) {
+    rust_prf_expand(sk, t, out);
+}
+#endif
+
+
+
+
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
 
 void masp_blake2b_expand_vec_four(const uint8_t *a, uint32_t a_len,
                                      const uint8_t *b, uint32_t b_len,
@@ -495,46 +562,47 @@ void masp_blake2b_expand_vec_two(const uint8_t *a, uint32_t a_len,
     cx_hash_no_throw(&ctx.header, CX_LAST, c, c_len, out, CTX_EXPAND_SEED_HASH_LEN);
 }
 
-void sk_to_pk(uint8_t *pkb, jj_en_t *G, cx_bn_t sk) {
-    jj_e_t pk; alloc_e(&pk);
-    en_mul(&pk, G, sk);
-    e_to_bytes(pkb, &pk);
-    destroy_e(&pk);
+#else
+
+void masp_blake2b_expand_vec_four(const uint8_t *a, uint32_t a_len,
+                                  const uint8_t *b, uint32_t b_len,
+                                  const uint8_t *c, uint32_t c_len,
+                                  const uint8_t *d, uint32_t d_len,
+                                  const uint8_t *e, uint32_t e_len,
+                                  uint8_t *out) {
+rust_blake2b_expand_vec_four(a, a_len, b, b_len, c, c_len, d, d_len, e, e_len, out, 64);
 }
 
-void ask_to_ak(uint8_t *ask_bytes, uint8_t *ak_out){
-    // ak is the byte representation of A = G.ask where G is the spending auth generator point
-    cx_bn_t ask;
-    CX_THROW(cx_bn_alloc(&ask, 32));
-    cx_bn_init(ask, ask_bytes, 32);
-    jj_en_t G;
-    alloc_en(&G);
-    load_en(&G, &SPENDING_GEN);
-
-    sk_to_pk(ak_out, &G, ask);
-    cx_bn_destroy(&ask);
-    destroy_en(&G);
+void masp_blake2b_expand_vec_three(const uint8_t *a, uint32_t a_len,
+                                   const uint8_t *b, uint32_t b_len,
+                                   const uint8_t *c, uint32_t c_len,
+                                   const uint8_t *d, uint32_t d_len,
+                                   uint8_t *out) {
+    rust_blake2b_expand_vec_three(a, a_len, b, b_len, c, c_len, d, d_len, out, 64);
 }
 
-void nsk_to_nk(uint8_t *nsk_bytes, uint8_t *nk_out){
-    cx_bn_t nsk;
-    CX_THROW(cx_bn_alloc(&nsk, 32));
-    cx_bn_init(nsk, nsk_bytes, 32);
-    jj_en_t G; alloc_en(&G); load_en(&G, &PROOF_GEN);
-    sk_to_pk(nk_out, &G, nsk);
-    cx_bn_destroy(&nsk);
-    destroy_en(&G);
+void masp_blake2b_expand_vec_two(const uint8_t *a, uint32_t a_len,
+                                 const uint8_t *b, uint32_t b_len,
+                                 const uint8_t *c, uint32_t c_len,
+                                 uint8_t *out) {
+    rust_blake2b_expand_vec_two(a, a_len, b, b_len, c, c_len, out, 64);
+
 }
+
+
+#endif
+
 
 void derive_dummy_ask_and_nsk(uint8_t *key_in, uint8_t *ask_out, uint8_t *nsk_out){
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
     cx_bn_lock(32, 0);
-    cx_bn_t rM;
-    CX_THROW(cx_bn_alloc(&rM, 32));
+    cx_bn_t rM; CX_THROW(cx_bn_alloc(&rM, 32));
     cx_bn_init(rM, fr_m, 32);
     init_mont(fq_m);
 
     cx_bn_t temp;
     CX_THROW(cx_bn_alloc(&temp, 32));
+#endif
 
     // derive the first layer of keys
     // ask, nsk are scalars obtained by hashing into 512 bit integer and then reducing mod R
@@ -542,17 +610,26 @@ void derive_dummy_ask_and_nsk(uint8_t *key_in, uint8_t *ask_out, uint8_t *nsk_ou
     uint8_t buffer[64]={0};
     uint8_t *const_ask = {0x00};
     prf_expand(key_in, sizeof(key_in), const_ask, sizeof(const_ask), buffer);
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
     from_bytes_wide(temp, buffer, rM);
     cx_bn_export(temp, ask_out, ASK_SIZE);
+#else
+    rust_from_bytes_wide(ask_out, buffer);
+#endif
 
     MEMZERO(buffer, sizeof(buffer));
 
     uint8_t const_nsk[] = {0x01};
     prf_expand(key_in, sizeof(key_in), const_nsk, sizeof(const_nsk), buffer);
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
     from_bytes_wide(temp, buffer, rM);
     cx_bn_export(temp, nsk_out, NSK_SIZE);
 
     cx_bn_destroy(&temp);
+
+#else
+    rust_from_bytes_wide(nsk_out, buffer);
+#endif
     MEMZERO(buffer, sizeof(buffer));
 }
 
@@ -575,11 +652,12 @@ void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out){
     memcpy(ask_bytes, &expandedSpendingKey, ASK_SIZE);
     memcpy(nsk_bytes, &expandedSpendingKey + ASK_SIZE, NSK_SIZE);
 
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
     cx_bn_t ask; CX_THROW(cx_bn_alloc(&ask, 32));
     cx_bn_init(ask, ask_bytes, 32);
     cx_bn_t nsk; CX_THROW(cx_bn_alloc(&nsk, 32));
     cx_bn_init(nsk, nsk_bytes, 32);
-
+#endif
     uint8_t tmp[64] = {0};
     for (unsigned int i = 0; i < sizeof(path); ++i) {
         uint32_t p = path[i];
@@ -622,35 +700,48 @@ void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out){
         uint8_t nsk_cur_bytes[NSK_SIZE] = {0};
         uint8_t buffer[64]={0};
 
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
         cx_bn_lock(32, 0);
         cx_bn_t rM; CX_THROW(cx_bn_alloc(&rM, 32));
         cx_bn_init(rM, fr_m, 32);
         init_mont(fq_m);
 
         cx_bn_t temp; CX_THROW(cx_bn_alloc(&temp, 32));
-
+#endif
         uint8_t ask_cur_const[] = {0x13};
         prf_expand(key, sizeof(key), ask_cur_const, sizeof(ask_cur_const), buffer);
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
         from_bytes_wide(temp, buffer, rM);
         cx_bn_export(temp, ask_cur_bytes, ASK_SIZE);
         cx_bn_t ask_cur; CX_THROW(cx_bn_alloc(&ask_cur, ASK_SIZE));
         cx_bn_init(ask_cur, ask_cur_bytes, ASK_SIZE);
+#else
+        rust_from_bytes_wide(ask_cur_bytes, buffer);
+#endif
 
         MEMZERO(buffer, sizeof(buffer));
 
         uint8_t nsk_cur_const[] = {0x14};
         prf_expand(key, sizeof(key), nsk_cur_const, sizeof(nsk_cur_const), buffer);
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
         from_bytes_wide(temp, buffer, rM);
         cx_bn_export(temp, nsk_cur_bytes, NSK_SIZE);
         cx_bn_t nsk_cur; CX_THROW(cx_bn_alloc(&nsk_cur, NSK_SIZE));
         cx_bn_init(nsk_cur, nsk_cur_bytes, NSK_SIZE);
 
         cx_bn_destroy(&temp);
+#else
+        rust_from_bytes_wide(nsk_cur_bytes, buffer);
+#endif
         MEMZERO(buffer, sizeof(buffer));
 
+#if defined(TARGET_NANOS) || defined(TARGET_NANOS2) || defined(TARGET_NANOX)
         cx_bn_mod_add_fixed(ask, ask, ask_cur, M); // ask = ask + ask_cur
         cx_bn_mod_add_fixed(nsk, nsk, nsk_cur, M); // nsk = nsk + nsk_cur
-
+#else
+        rust_fr_add(ask_bytes, ask_cur_bytes, ask_bytes);
+        rust_fr_add(nsk_bytes, nsk_cur_bytes, nsk_bytes);
+#endif
         // Update expanded spending key
         // ask and nsk
         derive_dummy_ask_and_nsk(key, expandedSpendingKey.ask, expandedSpendingKey.nsk);
@@ -702,3 +793,7 @@ void get_expanded_spending_key_from_seed(uint8_t *seed, expanded_spending_key_t*
     prf_expand(key, sizeof(key), const_dk, sizeof(const_dk), buffer);
     memcpy(out->dk, buffer, DK_SIZE);
 }
+
+#ifdef __cplusplus
+}
+#endif
