@@ -128,6 +128,8 @@ uint8_t spendlist_more_to_extract();
 // shielded output nvdata functions
 zxerr_t outputlist_append_item(uint8_t *d, uint8_t *pkd, uint64_t v, uint8_t memotype, uint8_t *ovk, uint8_t *rcmv,
                                uint8_t *rseed);
+output_item_t *outputlist_extract_next();
+int outputlist_more_to_extract();
 uint8_t outputlist_len();
 
 // signatures

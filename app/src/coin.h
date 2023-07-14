@@ -103,7 +103,7 @@ typedef enum {
 
 #define INS_INIT_MASP_TRANSFER 0xe0
 #define INS_EXTRACT_SPEND 0xe1
-
+#define INS_EXTRACT_OUTPUT 0xe2
 
 #define INS_GET_IVK 0xf0
 #define INS_GET_OVK 0xf1

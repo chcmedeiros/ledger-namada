@@ -197,6 +197,26 @@ __Z_INLINE void handleExtractSpendDataMASPTransfer(volatile uint32_t *tx, uint32
 
 }
 
+__Z_INLINE void handleExtractOutputDataMASPTransfer(volatile uint32_t *tx, uint32_t rx) {
+    zemu_log("----[handleExtractOutputData]\n");
+
+    *tx = 0;
+    if (rx != APDU_MIN_LENGTH || G_io_apdu_buffer[OFFSET_DATA_LEN] != 0) {
+        THROW(APDU_CODE_COMMAND_NOT_ALLOWED);
+    }
+
+    uint16_t replyLen = 0;
+    zxerr_t err = crypto_extract_output_rnd(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 2, &replyLen);
+    view_tx_state();
+    if (err == zxerr_ok) {
+        *tx = replyLen;
+        THROW(APDU_CODE_OK);
+    } else {
+        *tx = 0;
+        THROW(APDU_CODE_DATA_INVALID);
+    }
+}
+
 // Get the sapling full viewing key fvk = (ak, nk, ovk, dk)
 __Z_INLINE void handleGetKeyFVK(volatile uint32_t *flags,
                                 volatile uint32_t *tx, uint32_t rx) {
@@ -359,6 +379,20 @@ void handleApdu(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
                     handleExtractSpendDataMASPTransfer(tx, rx);
                     break;
                 }
+
+                // If there are any shielded outputs this is
+                // Step 3 in signing a MASP transaction:
+                // the clients requests information to build OutputDescriptions.
+                // In particular, the ledger should answer with
+                // rcv,  rseed (after ZIP202) and optional Hash_Seed
+                // This APDU is called for each shielded output.
+                case INS_EXTRACT_OUTPUT: {
+                    CHECK_PIN_VALIDATED()
+                    handleExtractOutputDataMASPTransfer(tx, rx);
+                    break;
+                }
+
+
 #if defined(APP_TESTING)
                     case INS_TEST: {
                     handleTest(flags, tx, rx);

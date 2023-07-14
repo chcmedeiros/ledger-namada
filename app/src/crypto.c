@@ -713,3 +713,41 @@ zxerr_t crypto_extract_spend_proof_key_and_rnd(uint8_t *buffer, uint16_t bufferL
 
     return zxerr_ok;
 }
+
+
+// handleExtractOutputDataMASPTransfer
+zxerr_t crypto_extract_output_rnd(uint8_t *buffer, uint16_t bufferLen, uint16_t *replyLen){
+    // First check that there a still items on the list of shielded outputs
+    // for which output data has not yet been extracted
+    if(!outputlist_more_to_extract()){
+        return zxerr_unknown;
+    }
+
+    // Ensure that the INS_EXTRACT_SPEND has been called
+    // and did not error.
+    if(get_state() != STATE_PROCESSED_SPEND_EXTRACTIONS){
+        return zxerr_unknown;
+    }
+
+    uint8_t *out = (uint8_t *) buffer;
+    MEMZERO(out, bufferLen);
+
+    const output_item_t *next = outputlist_extract_next();
+    if (next == NULL){
+        return zxerr_unknown;
+    }
+    MEMCPY(out, next->rcmvalue, RCM_V_SIZE);
+    MEMCPY(out + RCM_V_SIZE, next->rseed, RSEED_SIZE);
+
+    if(next->ovk[0] == 0x00){
+        MEMCPY(out + RCM_V_SIZE + RSEED_SIZE, next->ovk + 1, OVK_SIZE);
+        *replyLen = RCM_V_SIZE + RSEED_SIZE + OVK_SIZE;
+    }else{
+        *replyLen = RCM_V_SIZE + RSEED_SIZE;
+    }
+
+    if(!outputlist_more_to_extract()){
+        set_state(STATE_PROCESSED_ALL_EXTRACTIONS);
+    }
+    return zxerr_ok;
+}

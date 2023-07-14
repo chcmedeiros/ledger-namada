@@ -216,8 +216,6 @@ output_item_t *outputlist_retrieve_item(uint8_t i) {
     }
 }
 
-
-
 output_item_t *outputlist_extract_next() {
     if (transaction_header.outputlist_len <= transaction_header.outputdata_extract_index) {
         return NULL;
@@ -228,7 +226,7 @@ output_item_t *outputlist_extract_next() {
     }
 }
 
-int outputlist_more_extract() {
+int outputlist_more_to_extract() {
     return transaction_header.outputlist_len > transaction_header.outputdata_extract_index;
 }
 

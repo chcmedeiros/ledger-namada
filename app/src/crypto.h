@@ -51,7 +51,7 @@ zxerr_t crypto_fvk_sapling(uint8_t *buffer, uint16_t bufferLen, uint32_t p, uint
 zxerr_t crypto_extracttx_sapling(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata, const uint16_t txdatalen);
 zxerr_t crypto_hash_messagebuffer(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata, uint16_t txdataLen);
 zxerr_t crypto_extract_spend_proof_key_and_rnd(uint8_t *buffer, uint16_t bufferLen);
-
+zxerr_t crypto_extract_output_rnd(uint8_t *buffer, uint16_t bufferLen, uint16_t *replyLen);
 #ifdef __cplusplus
 }
 #endif
