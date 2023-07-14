@@ -121,6 +121,9 @@ zxerr_t t_outlist_append_item(uint8_t *addr, uint64_t v);
 // spend list nvdata functions
 zxerr_t spendlist_append_item(uint32_t p, uint64_t v, uint8_t *div, uint8_t *pkd, uint8_t *rcm, uint8_t *alpha);
 uint8_t spendlist_len();
+spend_item_t *spendlist_retrieve_item(uint8_t i);
+spend_item_t *spendlist_extract_next();
+uint8_t spendlist_more_to_extract();
 
 // shielded output nvdata functions
 zxerr_t outputlist_append_item(uint8_t *d, uint8_t *pkd, uint64_t v, uint8_t memotype, uint8_t *ovk, uint8_t *rcmv,

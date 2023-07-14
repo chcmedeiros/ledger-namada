@@ -7,7 +7,10 @@ extern "C" {
 #include <stdint.h>   // uint*_t
 #include "sapling_keys.h"
 
- void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out);
+    void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out);
+
+    // Gets keys required for computing the zk proofs for spend descriptions (ak and nsk)
+    void get_child_proof_key(uint8_t *seed, uint32_t pos, uint8_t* ak_out, uint8_t* nsk_out);
 
 // Exists but not needed out of sapling.c yet:
 // static void get_expanded_spending_key_from_seed(uint8_t *seed, expanded_spending_key_t* out);

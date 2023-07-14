@@ -100,10 +100,15 @@ typedef enum {
 #define INS_SIGN_WRAPPER                0x02
 
 #define INS_GET_SHIELDED_ADDRESS 0x10
+
 #define INS_INIT_MASP_TRANSFER 0xe0
+#define INS_EXTRACT_SPEND 0xe1
+
+
 #define INS_GET_IVK 0xf0
 #define INS_GET_OVK 0xf1
 #define INS_GET_NF 0xf2
+#define INS_GET_FVK 0xf3
 
 #define INS_GET_SIGNATURE 0x0A
 

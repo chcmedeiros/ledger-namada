@@ -449,7 +449,7 @@ zxerr_t crypto_fillSaplingSeed(uint8_t *sk) {
 }
 
 
-// handleGetKeyFVK: return the full viewing key for a given path
+// handleGetKeyFVK: return the full viewing key (fvk = (ak, nk, ovk, dk)) for a given path
 zxerr_t crypto_fvk_sapling(uint8_t *buffer, uint16_t bufferLen, uint32_t p, uint16_t *replyLen) {
 
     zemu_log_stack("crypto_fvk_sapling");
@@ -648,5 +648,68 @@ zxerr_t crypto_hash_messagebuffer(uint8_t *buffer, uint16_t bufferLen, const uin
         return zxerr_unknown;
     }
     cx_hash_sha256(txdata, txdataLen, buffer, CX_SHA256_SIZE);      // SHA256
+    return zxerr_ok;
+}
+
+typedef struct {
+    union {
+        // STEP 1
+        struct {
+            uint8_t zip32_seed[ZIP32_SEED_SIZE];
+            uint8_t sk[ED25519_SK_SIZE];
+        } step1;
+
+        struct {
+            uint8_t ask[ASK_SIZE];
+            uint8_t nsk[NSK_SIZE];
+        } step2;
+    };
+} tmp_spendinfo_s;
+
+// handleExtractSpendDataMASPTransfer
+zxerr_t crypto_extract_spend_proof_key_and_rnd(uint8_t *buffer, uint16_t bufferLen){
+    // First check that there a still items on the list of spends
+    // for which spend data has not yet been extracted
+    if(!spendlist_more_to_extract()){
+        return zxerr_unknown;
+    }
+
+    // Ensure that the INS_INIT_MASP_TRANSFER has been called
+    // and did not error.
+    if(get_state() != STATE_PROCESSED_INPUTS){
+        return zxerr_unknown;
+    }
+
+    uint8_t *out = (uint8_t *) buffer;
+    MEMZERO(out, bufferLen);
+
+    // Get the next item from the list of spends
+    const spend_item_t *next = spendlist_extract_next();
+    if (next == NULL){
+        return zxerr_unknown;
+    }
+
+    tmp_spendinfo_s tmp = {0};
+
+    zxerr_t error = crypto_fillSaplingSeed(tmp.step1.zip32_seed);
+    CHECK_APP_CANARY()
+    if(error != zxerr_ok){
+        MEMZERO(buffer, bufferLen);
+        return error;
+    }
+
+    // Get ak and nsk (the child proof key)
+    get_child_proof_key(tmp.step1.zip32_seed, next->path, out, out + AK_SIZE);
+    CHECK_APP_CANARY()
+
+    MEMZERO(&tmp, sizeof(tmp_spendinfo_s));
+
+    MEMCPY(out+AK_SIZE+NSK_SIZE, next->rcmvalue, RCM_SIZE);
+    MEMCPY(out+AK_SIZE+NSK_SIZE+RCM_SIZE, next->alpha,ALPHA_SIZE);
+
+    if(!spendlist_more_to_extract()){
+        set_state(STATE_PROCESSED_SPEND_EXTRACTIONS);
+    }
+
     return zxerr_ok;
 }

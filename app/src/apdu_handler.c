@@ -177,8 +177,27 @@ __Z_INLINE void handleInitMASPTransfer(volatile uint32_t *flags,
 
 }
 
+__Z_INLINE void handleExtractSpendDataMASPTransfer(volatile uint32_t *tx, uint32_t rx) {
+    zemu_log("----[handleExtractSpendDataMASPTransfer]\n");
 
-// Get the sapling full viewing key (ak, nk, ovk)
+    *tx = 0;
+    if (rx != APDU_MIN_LENGTH || G_io_apdu_buffer[OFFSET_DATA_LEN] != 0) {
+        THROW(APDU_CODE_COMMAND_NOT_ALLOWED);
+    }
+    // TODO implement the following
+    zxerr_t err = crypto_extract_spend_proof_key_and_rnd(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 2);
+    view_tx_state();
+    if (err == zxerr_ok) {
+        *tx = 128; //SPEND_EXTRACT_LEN
+        THROW(APDU_CODE_OK);
+    } else {
+        *tx = 0;
+        THROW(APDU_CODE_DATA_INVALID);
+    }
+
+}
+
+// Get the sapling full viewing key fvk = (ak, nk, ovk, dk)
 __Z_INLINE void handleGetKeyFVK(volatile uint32_t *flags,
                                 volatile uint32_t *tx, uint32_t rx) {
     zemu_log("----[handleGetKeyFVK]\n");
@@ -310,6 +329,7 @@ void handleApdu(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
                 }
 
                 // MASP transactions
+                // Get full viewing key fvk = (ak, nk, ovk, dk)
                 case INS_GET_FVK: {
                     zemu_log("----[INS_GET_FVK]\n");
                     CHECK_PIN_VALIDATED()
@@ -317,6 +337,10 @@ void handleApdu(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
                     break;
                 }
 
+                // Step 1 in signing a MASP transaction:
+                // the ledger receives an initial transaction blob
+                // and stores relevant information in flash memory,
+                // so that it can check consistency with what it signs later.
                 case INS_INIT_MASP_TRANSFER: {
                     zemu_log("----[INS_INIT_MASP_TRANSFER]\n");
                     CHECK_PIN_VALIDATED()
@@ -324,6 +348,17 @@ void handleApdu(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
                     break;
                 }
 
+                // If there are any spends (= shielded inputs) this is
+                // Step 2 in signing a MASP transaction:
+                // the clients requests information to build SpendDescriptions.
+                // In particular, the ledger should answer with
+                // a proof generating key (PGK) and randomness (rcv and alpha)
+                // This APDU is called for each spend.
+                case INS_EXTRACT_SPEND: {
+                    CHECK_PIN_VALIDATED()
+                    handleExtractSpendDataMASPTransfer(tx, rx);
+                    break;
+                }
 #if defined(APP_TESTING)
                     case INS_TEST: {
                     handleTest(flags, tx, rx);

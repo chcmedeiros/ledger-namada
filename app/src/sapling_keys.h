@@ -22,3 +22,12 @@ typedef struct {
     uint8_t ovk[OVK_SIZE];  // outgoing viewing key
     uint8_t dk[DK_SIZE];    // diversifier key
 } full_viewing_key_t;
+
+typedef struct {
+    uint8_t ak[AK_SIZE];
+    uint8_t ask[ASK_SIZE];
+    uint8_t nk[NK_SIZE];    // nullifier deriving key
+    uint8_t nsk[NSK_SIZE];
+    uint8_t ovk[OVK_SIZE];  // outgoing viewing key
+    uint8_t dk[DK_SIZE];    // diversifier key
+} all_keys_t;

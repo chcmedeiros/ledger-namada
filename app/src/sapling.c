@@ -633,7 +633,7 @@ void derive_dummy_ask_and_nsk(uint8_t *key_in, uint8_t *ask_out, uint8_t *nsk_ou
     MEMZERO(buffer, sizeof(buffer));
 }
 
-void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out){
+void get_all_keys(uint8_t *seed, uint32_t pos, all_keys_t* out){
     uint32_t path[3] = {FIRSTVALUE, COIN_TYPE, pos};
 
     uint8_t master_spending_key[64] = {0};
@@ -669,9 +669,9 @@ void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out){
             little_endian_write_u32((c+(1<<31)), le_i, sizeof (le_i));
             uint8_t *start_esk = expandedSpendingKey.ask;
             masp_blake2b_expand_vec_three(chain, sizeof (chain),
-                                         tmp_const, sizeof (tmp_const),
+                                          tmp_const, sizeof (tmp_const),
                                           start_esk, sizeof (expandedSpendingKey),
-                                         le_i, sizeof (le_i), tmp);
+                                          le_i, sizeof (le_i), tmp);
         } else {
             full_viewing_key_t fvk;
             ask_to_ak(expandedSpendingKey.ask, fvk.ak);
@@ -688,9 +688,9 @@ void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out){
             little_endian_write_u32(c, le_i, sizeof (le_i));
             uint8_t *start_fvk = fvk.ak;
             masp_blake2b_expand_vec_three(chain, sizeof (chain),
-                                         tmp_const, sizeof (tmp_const),
+                                          tmp_const, sizeof (tmp_const),
                                           start_fvk, sizeof (fvk),
-                                         le_i, sizeof (le_i), tmp);
+                                          le_i, sizeof (le_i), tmp);
         }
         memcpy(key, tmp,  32);
         memcpy(chain, tmp + 32,  32);
@@ -764,10 +764,29 @@ void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out){
         memcpy(expandedSpendingKey.dk, buffer, DK_SIZE);
         MEMZERO(buffer, sizeof(buffer));
     }
+    memcpy(out->ask, ask_bytes, ASK_SIZE);
+    memcpy(out->nsk, nsk_bytes, NSK_SIZE);
     ask_to_ak(ask_bytes, out->ak);
     nsk_to_nk(nsk_bytes, out->nk);
     memcpy(out->ovk, expandedSpendingKey.ovk, OVK_SIZE);
     memcpy(out->dk, expandedSpendingKey.dk, DK_SIZE);
+}
+
+void get_fvk(uint8_t *seed, uint32_t pos, full_viewing_key_t* out){
+    all_keys_t *keys = NULL;
+    get_all_keys(seed,pos,keys);
+    memcpy(out->ak, keys->ak, AK_SIZE);
+    memcpy(out->nk, keys->nk, NK_SIZE);
+    memcpy(out->ovk, keys->ovk, OVK_SIZE);
+    memcpy(out->dk, keys->dk, DK_SIZE);
+}
+
+
+void get_child_proof_key(uint8_t *seed, uint32_t pos, uint8_t* ak_out, uint8_t* nsk_out){
+    all_keys_t *keys = NULL;
+    get_all_keys(seed,pos,keys);
+    memcpy(ak_out, keys->ak, AK_SIZE);
+    memcpy(nsk_out, keys->nsk, NSK_SIZE);
 }
 
 

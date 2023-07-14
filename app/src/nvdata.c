@@ -163,6 +163,28 @@ uint8_t spendlist_len() {
     return transaction_header.spendlist_len;
 }
 
+spend_item_t *spendlist_retrieve_item(uint8_t i) {
+    if (transaction_header.spendlist_len < i) {
+        return NULL;
+    } else {
+        return (spend_item_t *) &N_spendlist.items[i];
+    }
+}
+
+spend_item_t *spendlist_extract_next() {
+    if (transaction_header.spendlist_len <= transaction_header.spenddata_extract_index) {
+        return NULL;
+    } else {
+        spend_item_t *result = (spend_item_t *) &N_spendlist.items[transaction_header.spenddata_extract_index];
+        transaction_header.spenddata_extract_index += 1;
+        return result;
+    }
+}
+
+uint8_t spendlist_more_to_extract() {
+    return transaction_header.spendlist_len > transaction_header.spenddata_extract_index;
+}
+
 zxerr_t outputlist_append_item(uint8_t *d, uint8_t *pkd, uint64_t v, uint8_t memotype, uint8_t *ovk, uint8_t *rcmv,
                                uint8_t *rseed) {
     if (transaction_header.outputlist_len >= OUTPUT_LIST_SIZE) {
