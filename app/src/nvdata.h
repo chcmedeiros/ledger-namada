@@ -73,6 +73,8 @@ typedef struct {
 
 typedef struct {
     uint64_t total_value;
+    // TODO: sapling_value should be parametrized by asset type
+    //  so there should be a list of pairs (value, asset_type)
     int64_t sapling_value;
     uint8_t state;
     uint8_t t_in_len;
@@ -117,6 +119,8 @@ uint8_t t_inlist_len();
 
 //transparent TXOUT API
 zxerr_t t_outlist_append_item(uint8_t *addr, uint64_t v);
+t_output_item_t *t_outlist_retrieve_item(uint8_t i);
+uint8_t t_outlist_len();
 
 // spend list nvdata functions
 zxerr_t spendlist_append_item(uint32_t p, uint64_t v, uint8_t *div, uint8_t *pkd, uint8_t *rcm, uint8_t *alpha);
@@ -137,6 +141,7 @@ zxerr_t transparent_signatures_append(uint8_t *signature);
 zxerr_t spend_signatures_append(uint8_t *signature);
 
 
+// TODO valuebalance should be per asset type
 //metadata flash api
 int64_t get_valuebalance();
 

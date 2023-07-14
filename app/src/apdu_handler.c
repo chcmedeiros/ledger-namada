@@ -217,6 +217,128 @@ __Z_INLINE void handleExtractOutputDataMASPTransfer(volatile uint32_t *tx, uint3
     }
 }
 
+__Z_INLINE void handleCheckandSignMASPTransfer(volatile uint32_t *tx, uint32_t rx) {
+    if (!process_chunk(tx, rx)) {
+        THROW(APDU_CODE_OK);
+    }
+    *tx = 0;
+
+    zemu_log("----[handleCheckandSignMASPTransfer]\n");
+
+    const uint8_t *message = tx_get_buffer();
+    const uint16_t messageLength = tx_get_buffer_length();
+
+    const uint8_t txVersion = G_io_apdu_buffer[OFFSET_P2];
+
+    char buffer[20];
+    zemu_log_stack(buffer);
+
+    if (get_state() != STATE_PROCESSED_ALL_EXTRACTIONS) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_UNPROCESSED_TX);
+    }
+
+    set_state(STATE_CHECKING_ALL_TXDATA);
+    view_tx_state();
+
+    zxerr_t err = crypto_check_prevouts(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_PREVOUT_INVALID);
+    }
+
+    err = crypto_check_sequence(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_SEQUENCE_INVALID);
+    }
+
+    err = crypto_check_outputs(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_OUTPUTS_INVALID);
+    }
+
+    // For NU5 there are no joinsplits to check
+
+    // /!\ the valuebalance is different to the total value
+    // TODO in MASP there is a valuebalance per asset type. We need to check each one (?)
+    err = crypto_check_valuebalance(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, txVersion);
+    if(err != zxerr_ok){
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_BAD_VALUEBALANCE);
+    }
+
+    err = crypto_checkspend_sapling(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength, txVersion);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_SPEND_INVALID);
+    }
+
+    err = crypto_checkoutput_sapling(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength, txVersion);
+    if (err != zxerr_ok) {
+        zemu_log("----[crypto_checkoutput_sapling failed]\n");
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_OUTPUT_CONTENT_INVALID);
+    }
+
+    err = crypto_checkencryptions_sapling(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_ENCRYPTION_INVALID);
+    }
+
+    set_state(STATE_VERIFIED_ALL_TXDATA);
+    view_tx_state();
+
+    err = crypto_sign_and_check_transparent(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength, txVersion);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_CHECK_SIGN_TR_FAIL);
+    }
+
+    err = crypto_signspends_sapling(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength, txVersion);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_SIGN_SPEND_FAIL);
+    }
+
+    err = crypto_hash_messagebuffer(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE - 3, message, messageLength);
+    if (err != zxerr_ok) {
+        MEMZERO(G_io_apdu_buffer, IO_APDU_BUFFER_SIZE);
+        view_idle_show(0, NULL);
+        transaction_reset();
+        THROW(APDU_CODE_HASH_MSG_BUF_FAIL);
+    }
+
+    set_state(STATE_SIGNED_TX);
+    view_tx_state();
+
+    *tx = 32;
+    THROW(APDU_CODE_OK);
+}
+
+
 // Get the sapling full viewing key fvk = (ak, nk, ovk, dk)
 __Z_INLINE void handleGetKeyFVK(volatile uint32_t *flags,
                                 volatile uint32_t *tx, uint32_t rx) {
@@ -392,6 +514,19 @@ void handleApdu(volatile uint32_t *flags, volatile uint32_t *tx, uint32_t rx) {
                     break;
                 }
 
+                // Step 4 in signing a MASP transaction:
+                // The client has already received all the information required
+                // to build shielded inputs (spends) and outputs. In this APDU call
+                // the client sends this transaction to the ledger. The ledger
+                // compares the received txn to what it had received and displayed
+                // in INS_INIT_MASP_TRANSFER, and, if everything is ok, it will
+                // sign each transarent input and each spend (shielded input).
+                // The signatures are stored in flash (not returned to the client yet).
+                case INS_CHECKANDSIGN: {
+                    CHECK_PIN_VALIDATED()
+                    handleCheckandSignMASPTransfer(tx, rx);
+                    break;
+                }
 
 #if defined(APP_TESTING)
                     case INS_TEST: {

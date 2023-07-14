@@ -29,6 +29,10 @@
 #define SPEND_LIST_SIZE         5
 #define OUTPUT_LIST_SIZE        5
 
+#define PREVOUT_SIZE            36
+#define T_OUTPUT_SIZE           34 // script size (26) + value size (uint64_t -> 8)
+
+
 #define ZIP32_SEED_SIZE         64
 
 #define ED25519_SK_SIZE         64

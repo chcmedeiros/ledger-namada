@@ -28,6 +28,7 @@
 #include "zxmacros.h"
 #include "zxformat.h"
 #include "tx.h"
+#include "txid.h"
 
 #include "cx.h"
 #include "cx_sha256.h"
@@ -571,6 +572,8 @@ zxerr_t crypto_extracttx_sapling(uint8_t *buffer, uint16_t bufferLen, const uint
         pars_ctx.buffer = start + INDEX_INPUT_INPUTVALUE;
         pars_ctx.bufferLen = 8;
         uint64_t v = 0;
+        // TODO: Here when we read the value it should be parametrized by the asset type
+        //  so we should also read the asset identifier and store this
         pars_err = _readUInt64(&pars_ctx, &v);
         if (pars_err != parser_ok) {
             return (zxerr_t) EXTRACT_SAPLING_E8;
@@ -583,6 +586,7 @@ zxerr_t crypto_extracttx_sapling(uint8_t *buffer, uint16_t bufferLen, const uint
         random_fr(rnd1);
         random_fr(rnd2);
 
+        // This needs to be parametrised by the asset type (of v)
         zxerr_t err = spendlist_append_item(p, v, div, pkd, rnd1, rnd2);
         if (err != zxerr_ok) {
             return (zxerr_t) EXTRACT_SAPLING_E9;
@@ -751,3 +755,71 @@ zxerr_t crypto_extract_output_rnd(uint8_t *buffer, uint16_t bufferLen, uint16_t 
     }
     return zxerr_ok;
 }
+
+// handleCheckandSignMASPTransfer step 1/11
+zxerr_t crypto_check_prevouts(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata){
+    zemu_log_stack("crypto_check_prevouts");
+    MEMZERO(buffer, bufferLen);
+
+    if(get_state() != STATE_CHECKING_ALL_TXDATA){
+        return zxerr_unknown;
+    }
+
+    uint8_t hash[HASH_LEN] = {0};
+    size_t prevouts_hash_offset = 0;
+    nu5_transparent_prevouts_hash(txdata,hash);
+    prevouts_hash_offset = NU5_INDEX_HASH_PREVOUTSHASH;
+
+    if(MEMCMP(hash, txdata + start_sighashdata() +  prevouts_hash_offset, HASH_LEN) != 0){
+        return zxerr_unknown;
+    }
+    return zxerr_ok;
+}
+
+// handleCheckandSign step 2/11
+zxerr_t crypto_check_sequence(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata){
+    zemu_log_stack("crypto_check_sequence");
+    MEMZERO(buffer, bufferLen);
+
+    if(get_state() != STATE_CHECKING_ALL_TXDATA){
+        return zxerr_unknown;
+    }
+
+    uint8_t hash[HASH_LEN] = {0};
+    size_t sequence_hash_offset = 0;
+
+    nu5_transparent_sequence_hash(txdata,hash);
+    sequence_hash_offset = NU5_INDEX_HASH_SEQUENCEHASH;
+
+    if(MEMCMP(hash, txdata + start_sighashdata() +  sequence_hash_offset, HASH_LEN) != 0){
+        return zxerr_unknown;
+    }
+    return zxerr_ok;
+}
+
+// handleCheckandSign step 3/11
+zxerr_t crypto_check_outputs(uint8_t *buffer, uint16_t bufferLen, const uint8_t *txdata, const uint16_t txdatalen){
+    zemu_log_stack("crypto_check_outputs");
+    if(start_sighashdata() +  SAPLING_LENGTH_HASH_DATA != txdatalen){
+        return zxerr_unknown;
+    }
+
+    if(get_state() != STATE_CHECKING_ALL_TXDATA){
+        return zxerr_unknown;
+    }
+
+    MEMZERO(buffer, bufferLen);
+    uint8_t hash[HASH_LEN] = {0};
+    size_t sapling_outputs_hash_offset = 0;
+
+
+    nu5_transparent_outputs_hash(hash);
+    sapling_outputs_hash_offset = NU5_INDEX_HASH_OUTPUTSHASH;
+
+
+    if(MEMCMP(hash, txdata + start_sighashdata() +  sapling_outputs_hash_offset, HASH_LEN) != 0){
+        return zxerr_unknown;
+    }
+    return zxerr_ok;
+}
+

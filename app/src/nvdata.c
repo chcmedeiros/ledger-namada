@@ -109,6 +109,10 @@ t_output_item_t *t_outlist_retrieve_item(uint8_t i) {
     }
 }
 
+uint8_t t_outlist_len() {
+    return transaction_header.t_out_len;
+}
+
 zxerr_t transparent_signatures_append(uint8_t *signature) {
     if (transaction_header.t_sign_index >= transaction_header.t_in_len) {
         return zxerr_unknown;
