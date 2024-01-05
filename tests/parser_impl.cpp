@@ -1,105 +1,191 @@
 /*******************************************************************************
-*   (c) 2018 - 2022 Zondax AG
-*
-*  Licensed under the Apache License, Version 2.0 (the "License");
-*  you may not use this file except in compliance with the License.
-*  You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-*  Unless required by applicable law or agreed to in writing, software
-*  distributed under the License is distributed on an "AS IS" BASIS,
-*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-*  See the License for the specific language governing permissions and
-*  limitations under the License.
-********************************************************************************/
+ *   (c) 2018 - 2022 Zondax AG
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ ********************************************************************************/
 
-#include "gmock/gmock.h"
-
-#include <vector>
-#include <iostream>
-#include <cstring>
 #include <hexutils.h>
+
+#include <cstring>
+#include <iostream>
+#include <vector>
+
 #include "crypto_helper.h"
+#include "gmock/gmock.h"
 #include "leb128.h"
 
 using namespace std;
 struct NamAddress {
-        string pubkey;
-        string address;
+  string pubkey;
+  string address;
 };
 
 struct LEB128Testcase {
-        uint64_t input;
-        vector<uint8_t> expected;
-        uint8_t consumed;
+  uint64_t input;
+  vector<uint8_t> expected;
+  uint8_t consumed;
 };
 
 TEST(Address, NamadaEncoding) {
-        vector<NamAddress> addresses {
-                {"9634575029ce5ef3b7bb548e7fcacfffdae8897c9732c2bc30376258fd0a1c9f", "tnam1qz3pcwcrra2zw8fsaryh3tuuy3dzfrexcuk3jw7h"},
-                {"c7cdf55184b9456332df165f78fcef4b64dd639a3cf9454bd7112d62aaccbc86", "tnam1qrmnjwdpwmsruk30a35yqsfsh9wgywcamumj8amg"},
-                {"d76b1c5695049825e4022d0650ac8a5a6a3e1ea88fbe30b02e571e0a7f98dade", "tnam1qqc49r9taphkhc25qnwnsgkdz4j5wl8c6yeysjas"},
-                {"b1f9725374a60fe56bf4ee5f9db9666f411b6f64133edb8a96c08e502f41399a", "tnam1qrx5ggscqyfg3zajlztxf2w4pz2q366ahgln4kkj"},
-                {"f5c4448c1b80cd9738a7a123fc81263d498ef453fc5ad6ddd98e73a1012603be", "tnam1qqse36g497m6s5den79wfs9prwwhf29mrqag9ngj"},
-                {"07404767b893c0947ec5e716589737e10079ecefca5804b04369dcf32acfdce0", "tnam1qpvlr52kwyppx6kjuwta48w3rchzm53jn5wx2cr0"},
-                {"5d4320f72937ef7286f719a85c80c5c94b46b701777a8b0c11103b59216130e3", "tnam1qpznuls96xtm073e38xtyqq59ysdf7t2cgecsvck"},
-                {"bd43f2977212b8d190c7f3f8c9f704444baa137fdcecae25caf37003187a6393", "tnam1qpcn9ml2452r9qty6m24xvga9upszgxgusatjd54"},
-                {"63995c4e214ea4aa11bd39d72fafff14fe4863fd1206ce8024d625a6beab25c9", "tnam1qpxsftlhety7q6ud9xqauhys3rs5zn408v45g94g"},
-                {"b774893e3fd3adca09b8ffb09b6e5c0aabe605c17572c0ee0f89e46d7c0e0511", "tnam1qql48y48256lwaxv9kpykjhl4xngd3euwglmceks"},
-                {"5d55414cc6f88216b5f988210d8c6326c3b14bddf39354a3ff482a866cf7a8bd", "tnam1qzmmwmsr89vz8fctq9fznfgeexwrmtammuvty3mp"},
-                {"a5ab6e3d8d6e7f047c6ef42dc99d3b5bff42fbedcbba5c648e45527aafd1d298", "tnam1qqtpy826hf37n7s6n80uwk0qys8cgk3phs8ut7zt"},
-                {"a39f0db14ea98e5f813e9b42083587b2367fa503b1f849ef780de886698c6840", "tnam1qqdue893eeme8l29wllh89mp9pel64zzhuflftqd"},
-                {"43afee356fa2e2da1de56705cd2f16531ef2914abdebdeb57ee0ad7be309a901", "tnam1qz3pv6u2xwxdncjgtwr9fy8h0dwdy078jql5kxf4"},
-                {"836fb47a9c8e971d3060916f4370c40a6ce0be7b4ab35fe113828ed811663b68", "tnam1qzj48de7gdqy4ljzdq5cv7m4mhydjzy0k5ewhn2j"},
-                {"72c81d781092ed6a651cca784d5bee8c3de4a3ff0f4b2af90253784bf69424c3", "tnam1qzqeg78j3ksm6w6cup80uk2kz7nlhe0kn5qwjlv8"},
-                {"9e40f910b19fc53900b1540fb24817e7d5408c0a34189f6eb091fc7873fb3458", "tnam1qr3j02d0fegpp220y620svp4dzjve59rdvtmdx7d"},
-                {"e24cf05d45273fa955915a84a840587a0f64dc9d4332f930bc02bd76ca945bda", "tnam1qp3u2yplk8ng2qag64wdk9ssc7nft8sw4y8pcc0g"},
-                {"6d0e23f95787481ed55415c92a98e72d833ebb2aaf1b8df6dd8e94c583d0e1c7", "tnam1qrhpzl4cry7amt0mgchz73mv2gz6t0cz4smfxt9t"},
-                {"7cf5371c3250b74afc65d67b80bbbb99613823b5d415a74df9677127c8e70c1e", "tnam1qrrrlvxvyexaj3ytzky4dzqnckxgpfyu4qe2r5tn"}
-        };
+  vector<NamAddress> addresses{
+      {"9634575029ce5ef3b7bb548e7fcacfffdae8897c9732c2bc30376258fd0a1c9f",
+       "tnam1qz3pcwcrra2zw8fsaryh3tuuy3dzfrexcuk3jw7h"},
+      {"c7cdf55184b9456332df165f78fcef4b64dd639a3cf9454bd7112d62aaccbc86",
+       "tnam1qrmnjwdpwmsruk30a35yqsfsh9wgywcamumj8amg"},
+      {"d76b1c5695049825e4022d0650ac8a5a6a3e1ea88fbe30b02e571e0a7f98dade",
+       "tnam1qqc49r9taphkhc25qnwnsgkdz4j5wl8c6yeysjas"},
+      {"b1f9725374a60fe56bf4ee5f9db9666f411b6f64133edb8a96c08e502f41399a",
+       "tnam1qrx5ggscqyfg3zajlztxf2w4pz2q366ahgln4kkj"},
+      {"f5c4448c1b80cd9738a7a123fc81263d498ef453fc5ad6ddd98e73a1012603be",
+       "tnam1qqse36g497m6s5den79wfs9prwwhf29mrqag9ngj"},
+      {"07404767b893c0947ec5e716589737e10079ecefca5804b04369dcf32acfdce0",
+       "tnam1qpvlr52kwyppx6kjuwta48w3rchzm53jn5wx2cr0"},
+      {"5d4320f72937ef7286f719a85c80c5c94b46b701777a8b0c11103b59216130e3",
+       "tnam1qpznuls96xtm073e38xtyqq59ysdf7t2cgecsvck"},
+      {"bd43f2977212b8d190c7f3f8c9f704444baa137fdcecae25caf37003187a6393",
+       "tnam1qpcn9ml2452r9qty6m24xvga9upszgxgusatjd54"},
+      {"63995c4e214ea4aa11bd39d72fafff14fe4863fd1206ce8024d625a6beab25c9",
+       "tnam1qpxsftlhety7q6ud9xqauhys3rs5zn408v45g94g"},
+      {"b774893e3fd3adca09b8ffb09b6e5c0aabe605c17572c0ee0f89e46d7c0e0511",
+       "tnam1qql48y48256lwaxv9kpykjhl4xngd3euwglmceks"},
+      {"5d55414cc6f88216b5f988210d8c6326c3b14bddf39354a3ff482a866cf7a8bd",
+       "tnam1qzmmwmsr89vz8fctq9fznfgeexwrmtammuvty3mp"},
+      {"a5ab6e3d8d6e7f047c6ef42dc99d3b5bff42fbedcbba5c648e45527aafd1d298",
+       "tnam1qqtpy826hf37n7s6n80uwk0qys8cgk3phs8ut7zt"},
+      {"a39f0db14ea98e5f813e9b42083587b2367fa503b1f849ef780de886698c6840",
+       "tnam1qqdue893eeme8l29wllh89mp9pel64zzhuflftqd"},
+      {"43afee356fa2e2da1de56705cd2f16531ef2914abdebdeb57ee0ad7be309a901",
+       "tnam1qz3pv6u2xwxdncjgtwr9fy8h0dwdy078jql5kxf4"},
+      {"836fb47a9c8e971d3060916f4370c40a6ce0be7b4ab35fe113828ed811663b68",
+       "tnam1qzj48de7gdqy4ljzdq5cv7m4mhydjzy0k5ewhn2j"},
+      {"72c81d781092ed6a651cca784d5bee8c3de4a3ff0f4b2af90253784bf69424c3",
+       "tnam1qzqeg78j3ksm6w6cup80uk2kz7nlhe0kn5qwjlv8"},
+      {"9e40f910b19fc53900b1540fb24817e7d5408c0a34189f6eb091fc7873fb3458",
+       "tnam1qr3j02d0fegpp220y620svp4dzjve59rdvtmdx7d"},
+      {"e24cf05d45273fa955915a84a840587a0f64dc9d4332f930bc02bd76ca945bda",
+       "tnam1qp3u2yplk8ng2qag64wdk9ssc7nft8sw4y8pcc0g"},
+      {"6d0e23f95787481ed55415c92a98e72d833ebb2aaf1b8df6dd8e94c583d0e1c7",
+       "tnam1qrhpzl4cry7amt0mgchz73mv2gz6t0cz4smfxt9t"},
+      {"7cf5371c3250b74afc65d67b80bbbb99613823b5d415a74df9677127c8e70c1e",
+       "tnam1qrrrlvxvyexaj3ytzky4dzqnckxgpfyu4qe2r5tn"}};
 
-        for (const auto& testcase : addresses) {
-                uint8_t pubkey[100] = {0};
-                auto bufferLen = parseHexString(pubkey,
-                                                sizeof(pubkey),
-                                                testcase.pubkey.c_str());
+  for (const auto& testcase : addresses) {
+    uint8_t pubkey[100] = {0};
+    auto bufferLen =
+        parseHexString(pubkey, sizeof(pubkey), testcase.pubkey.c_str());
 
-                uint8_t actualAddress[ADDRESS_LEN_TESTNET] = {0};
-                const uint8_t address_len = crypto_encodePubkey_ed25519(actualAddress, sizeof(actualAddress), pubkey);
-                EXPECT_EQ(address_len, ADDRESS_LEN_TESTNET);
+    uint8_t actualAddress[ADDRESS_LEN_TESTNET] = {0};
+    const uint8_t address_len = crypto_encodePubkey_ed25519(
+        actualAddress, sizeof(actualAddress), addr_mainnet_transparent, pubkey);
+    EXPECT_EQ(address_len, ADDRESS_LEN_TESTNET);
 
-                const string namada_address(actualAddress, actualAddress + ADDRESS_LEN_TESTNET);
-                EXPECT_EQ(namada_address, testcase.address);
-        }
+    const string namada_address(actualAddress,
+                                actualAddress + ADDRESS_LEN_TESTNET);
+    EXPECT_EQ(namada_address, testcase.address);
+  }
 }
 
 TEST(LEB128, LEB128Encoding) {
-        vector<LEB128Testcase> leb128_encoding {
-                {12, {0x0C}, 1},
-                {32, {0x20}, 1},
-                { 1548174235, {0x9B, 0x87, 0x9D, 0xE2, 0x05, }, 5 },
-                { 693000000, {0xC0, 0xAE, 0xB9, 0xCA, 0x02, }, 5 },
-                { 1135613917, {0xDD, 0xAF, 0xC0, 0x9D, 0x04, }, 5 },
-                { 390000000, {0x80, 0xDB, 0xFB, 0xB9, 0x01, }, 5 },
-                { 1150276518, {0xA6, 0xA7, 0xBF, 0xA4, 0x04, }, 5 },
-                { 992000000, {0x80, 0xF0, 0x82, 0xD9, 0x03, }, 5 },
-                { 1640106391, {0x97, 0x93, 0x88, 0x8E, 0x06, }, 5 },
-                { 965000000, {0xC0, 0xF6, 0x92, 0xCC, 0x03, }, 5 },
-                { 1002286660, {0xC4, 0xDC, 0xF6, 0xDD, 0x03}, 5 },
-                { 308000000, {0x80, 0xEA, 0xEE, 0x92, 0x01}, 5 },
-        };
+  vector<LEB128Testcase> leb128_encoding{
+      {12, {0x0C}, 1},
+      {32, {0x20}, 1},
+      {1548174235,
+       {
+           0x9B,
+           0x87,
+           0x9D,
+           0xE2,
+           0x05,
+       },
+       5},
+      {693000000,
+       {
+           0xC0,
+           0xAE,
+           0xB9,
+           0xCA,
+           0x02,
+       },
+       5},
+      {1135613917,
+       {
+           0xDD,
+           0xAF,
+           0xC0,
+           0x9D,
+           0x04,
+       },
+       5},
+      {390000000,
+       {
+           0x80,
+           0xDB,
+           0xFB,
+           0xB9,
+           0x01,
+       },
+       5},
+      {1150276518,
+       {
+           0xA6,
+           0xA7,
+           0xBF,
+           0xA4,
+           0x04,
+       },
+       5},
+      {992000000,
+       {
+           0x80,
+           0xF0,
+           0x82,
+           0xD9,
+           0x03,
+       },
+       5},
+      {1640106391,
+       {
+           0x97,
+           0x93,
+           0x88,
+           0x8E,
+           0x06,
+       },
+       5},
+      {965000000,
+       {
+           0xC0,
+           0xF6,
+           0x92,
+           0xCC,
+           0x03,
+       },
+       5},
+      {1002286660, {0xC4, 0xDC, 0xF6, 0xDD, 0x03}, 5},
+      {308000000, {0x80, 0xEA, 0xEE, 0x92, 0x01}, 5},
+  };
 
-        for (const auto& testcase : leb128_encoding) {
-                uint8_t encoded[MAX_LEB128_OUTPUT] = {0};
-                uint8_t bytes = 0;
-                const zxerr_t err = encodeLEB128(testcase.input, (uint8_t*) &encoded, MAX_LEB128_OUTPUT, &bytes);
+  for (const auto& testcase : leb128_encoding) {
+    uint8_t encoded[MAX_LEB128_OUTPUT] = {0};
+    uint8_t bytes = 0;
+    const zxerr_t err = encodeLEB128(testcase.input, (uint8_t*)&encoded,
+                                     MAX_LEB128_OUTPUT, &bytes);
 
-                ASSERT_EQ(err, zxerr_ok);
-                ASSERT_EQ(testcase.consumed, bytes);
+    ASSERT_EQ(err, zxerr_ok);
+    ASSERT_EQ(testcase.consumed, bytes);
 
-                EXPECT_TRUE(memcmp(testcase.expected.data(), &encoded, bytes) == 0);
-        }
+    EXPECT_TRUE(memcmp(testcase.expected.data(), &encoded, bytes) == 0);
+  }
 }
 
 #if 0
