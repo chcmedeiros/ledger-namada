@@ -21,8 +21,9 @@ import { models, hdpath, defaultOptions, hdpath_testnet } from './common'
 jest.setTimeout(120000)
 
 const expected_pubkey = '0039c1a4bea74c320ab04be5b218369d8c1ae21e41f27edee173ce5e6a51015a4d'
-const expected_address = "tnam1qq6qyugak0gd4up6lma8z8wr88w3pq9lgvfhw6yu"
-const expected_address_testnet = "testtnam1qq6qyugak0gd4up6lma8z8wr88w3pq9lgvfhw6yu"
+const expected_pubkey_testnet = '009cfbee82a799b8497430e8665f23e7b8e5b9345e6bbc6ee3895daa2ab8c00e16'
+const expected_address = 'tnam1qq6qyugak0gd4up6lma8z8wr88w3pq9lgvfhw6yu'
+const expected_address_testnet = 'testtnam1qpax39ugda8qts85e37k3kmsdr476m5k7cga'
 
 describe('Standard', function () {
   test.concurrent.each(models)('can start and stop container', async function (m) {
@@ -84,13 +85,12 @@ describe('Standard', function () {
 
       expect(resp.publicKey.toString('hex')).toEqual(expected_pubkey)
       expect(resp.address.toString()).toEqual(expected_address)
-
     } finally {
       await sim.close()
     }
   })
 
-    test.concurrent.each(models)('get pubkey and address - testnet', async function (m) {
+  test.concurrent.each(models)('get pubkey and address - testnet', async function (m) {
     const sim = new Zemu(m.path)
     try {
       await sim.start({ ...defaultOptions, model: m.name })
@@ -107,9 +107,8 @@ describe('Standard', function () {
       console.log(resp.address.toString())
       console.log(resp.publicKey.toString('hex'))
 
-      expect(resp.publicKey.toString('hex')).toEqual(expected_pubkey)
-      expect(resp.address.toString()).toEqual(expected_address)
-
+      expect(resp.publicKey.toString('hex')).toEqual(expected_pubkey_testnet)
+      expect(resp.address.toString()).toEqual(expected_address_testnet)
     } finally {
       await sim.close()
     }
@@ -163,7 +162,7 @@ describe('Standard', function () {
       const respRequest = app.showAddressAndPubKey(hdpath_testnet)
 
       await sim.waitUntilScreenIsNot(sim.getMainMenuSnapshot())
-      await sim.compareSnapshotsAndApprove('.', `${m.prefix.toLowerCase()}-show_address`)
+      await sim.compareSnapshotsAndApprove('.', `${m.prefix.toLowerCase()}-show_address_testnet`)
 
       const resp = await respRequest
       console.log(resp)
@@ -176,8 +175,8 @@ describe('Standard', function () {
       console.log(resp.address.toString())
       console.log(resp.publicKey.toString('hex'))
 
-      expect(resp.publicKey.toString('hex')).toEqual(expected_pubkey)
-      expect(resp.address.toString()).toEqual(expected_address)
+      expect(resp.publicKey.toString('hex')).toEqual(expected_pubkey_testnet)
+      expect(resp.address.toString()).toEqual(expected_address_testnet)
     } finally {
       await sim.close()
     }
@@ -207,5 +206,4 @@ describe('Standard', function () {
       await sim.close()
     }
   })
-
 })
